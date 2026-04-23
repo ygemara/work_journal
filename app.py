@@ -14,28 +14,19 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    [data-testid="stSidebar"] { background: #1e293b; }
-    [data-testid="stSidebar"] * { color: #e2e8f0 !important; }
-    [data-testid="stSidebar"] .stSelectbox label { color: #94a3b8 !important; font-size:0.8rem !important; }
     [data-testid="metric-container"] {
         background: #f8fafc; border: 1px solid #e2e8f0;
         border-radius: 12px; padding: 1rem 1.25rem;
     }
     .stTabs [data-baseweb="tab"] { border-radius: 8px 8px 0 0; padding: 8px 20px; font-weight: 500; }
     .section-header {
-        font-size: 1.1rem; font-weight: 700; color: #1e293b;
+        font-size: 1.1rem; font-weight: 700;
         border-left: 4px solid #6366f1; padding-left: 10px; margin: 0.5rem 0 1rem;
     }
     .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-size:0.75rem; font-weight:600; }
-    .badge-high   { background:#fee2e2; color:#b91c1c; }
-    .badge-medium { background:#fef3c7; color:#b45309; }
-    .badge-low    { background:#dcfce7; color:#15803d; }
-    .mode-pill {
-        display:inline-block; padding:3px 12px; border-radius:999px;
-        font-size:0.75rem; font-weight:600; margin-bottom:0.5rem;
-    }
-    .mode-local  { background:#dbeafe; color:#1d4ed8; }
-    .mode-sheets { background:#dcfce7; color:#15803d; }
+    .badge-high   { background:#fee2e2; color:#991b1b; }
+    .badge-medium { background:#fef9c3; color:#854d0e; }
+    .badge-low    { background:#dcfce7; color:#166534; }
     #MainMenu, footer { visibility: hidden; }
     .block-container { padding-top: 1.5rem; }
 </style>
@@ -76,18 +67,7 @@ def dm():
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 📋 Manager Dashboard")
-
-    mode = st.session_state.get("mode", "local")
-    if mode == "local":
-        st.markdown('<span class="mode-pill mode-local">💾 Local mode</span>', unsafe_allow_html=True)
-        st.caption("Data saved in **data.json** next to the app.")
-    else:
-        st.markdown('<span class="mode-pill mode-sheets">☁️ Google Sheets</span>', unsafe_allow_html=True)
-        st.caption("Data synced to your spreadsheet.")
-
     st.markdown("---")
-
-    # ── Team ──────────────────────────────────────────────────────────────────
     st.markdown("### 👥 Your Team")
     new_name = st.text_input("Add a direct report", placeholder="e.g. Jane Smith", label_visibility="collapsed")
     if st.button("➕ Add person", use_container_width=True) and new_name.strip():
@@ -101,32 +81,6 @@ with st.sidebar:
             st.markdown(f"&nbsp;&nbsp;• {r}")
     else:
         st.caption("No team members yet — add one above.")
-
-    st.markdown("---")
-
-    # ── Manual Google Sheets connection (fallback if secrets not configured) ──
-    if mode == "local":
-        with st.expander("☁️ Connect Google Sheets"):
-            st.caption("Connect a Google Sheet to sync your data to the cloud.")
-            spreadsheet_id = st.text_input("Spreadsheet ID", placeholder="1BxiMVs0XRA5...")
-            creds_file = st.file_uploader("Service account JSON", type="json")
-            if not GSPREAD_AVAILABLE:
-                st.warning("Run `pip install gspread google-auth` first.")
-            elif st.button("Connect", type="primary", use_container_width=True):
-                if not spreadsheet_id or not creds_file:
-                    st.error("Need both the Spreadsheet ID and the JSON file.")
-                else:
-                    try:
-                        creds_data = json.loads(creds_file.read())
-                        sheets_dm = SheetsManager(creds_data, spreadsheet_id)
-                        sheets_dm.ensure_worksheets()
-                        st.session_state.dm   = sheets_dm
-                        st.session_state.mode = "sheets"
-                        st.session_state.direct_reports = sheets_dm.get_direct_reports()
-                        st.success("Connected ✓")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Failed: {e}")
 
     st.markdown("---")
     if st.button("🔄 Refresh", use_container_width=True):
