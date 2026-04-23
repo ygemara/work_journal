@@ -48,7 +48,7 @@ def try_connect_from_secrets() -> SheetsManager | None:
     try:
         sid = st.secrets.get("spreadsheet_id", "")
         creds = dict(st.secrets.get("gcp_service_account", {}))
-        if not sid or not creds or sid == "PASTE_YOUR_SPREADSHEET_ID_HERE":
+        if not sid or not creds or sid == "1t7YtX2HTU2LIxplYTWNN1a3uZNQDv0hn7x_0mIBRKFI":
             return None
         sm = SheetsManager(creds, sid)
         sm.ensure_worksheets()
