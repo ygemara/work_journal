@@ -8,7 +8,9 @@ LOCAL_FILE = "data.json"
 SCHEMAS: dict[str, list[str]] = {
     "Issues":      ["Title", "Description", "Priority", "Owner", "Due", "Status", "Created"],
     "Agenda":      ["Person", "Topic", "Category", "AddedBy", "Discussed", "Created"],
-    "ActionItems": ["Task", "Owner", "Due", "Source", "Status", "Created"],
+    "ActionItems": ["Task", "Owner", "Due", "Source", "Status", "Notes", "Created"],
+    "Meetings":     ["Title", "Date", "Attendees", "Type", "Summary", "Decisions", "Created"],
+    "Scripts":      ["Title", "Language", "Script", "Notes", "Issues", "Questions", "Status", "Created"],
     "Calendar":    ["Title", "Date", "Time", "Type", "With", "Notes"],
     "Emails":      ["Subject", "From", "Received", "Priority", "Action", "Status", "Notes", "Created"],
     "Reference":   ["Title", "Category", "Content", "Explanation", "Tags", "Created"],
