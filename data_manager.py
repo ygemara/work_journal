@@ -127,17 +127,14 @@ class SheetsManager:
         self._sh = self._gc.open_by_key(spreadsheet_id)
 
     def ensure_worksheets(self):
-        try:
-            existing = {ws.title for ws in self._sh.worksheets()}
-            for name, cols in SCHEMAS.items():
-                if name not in existing:
-                    try:
-                        ws = self._sh.add_worksheet(title=name, rows=1000, cols=max(len(cols), 10))
-                        ws.append_row(cols)
-                    except Exception:
-                        pass  # sheet already exists, skip
-        except Exception:
-            pass
+        existing = {ws.title for ws in self._sh.worksheets()}
+        for name, cols in SCHEMAS.items():
+            if name not in existing:
+                try:
+                    ws = self._sh.add_worksheet(title=name, rows=1000, cols=max(len(cols), 10))
+                    ws.append_row(cols)
+                except Exception:
+                    pass
 
     def _ws(self, name: str):
         return self._sh.worksheet(name)
