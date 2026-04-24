@@ -63,14 +63,16 @@ def dm() -> SheetsManager:
     return get_manager()
 
 
+@st.cache_data(ttl=120, show_spinner=False)
 def get_data(sheet: str) -> pd.DataFrame:
     return get_manager().get_data(sheet)
 
 
 def save(fn, *args, success_msg="Saved!", **kwargs):
-    """Call a write fn. On success rerun. On error show message."""
+    """Call a write fn. On success clear cache and rerun. On error show message."""
     try:
         fn(*args, **kwargs)
+        get_data.clear()
         if success_msg:
             st.toast(success_msg)
         st.rerun()
