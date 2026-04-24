@@ -5,6 +5,24 @@ from data_manager import SheetsManager
 
 st.set_page_config(page_title="Manager Dashboard", page_icon="📋", layout="wide")
 
+# ── password protection ───────────────────────────────────────────────────────
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.markdown("## 🔒 Manager Dashboard")
+    st.markdown("Please log in to continue.")
+    with st.form("login"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.form_submit_button("Log in", type="primary"):
+            if username == "admin" and password == "admin":
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Incorrect username or password.")
+    st.stop()
+
 st.markdown("""
 <style>
     [data-testid="metric-container"] {
@@ -129,8 +147,8 @@ except Exception as e:
 
 st.markdown("---")
 
-tabs = st.tabs(["🔴 Issues", "💬 1:1 Agenda", "✅ Action Items", "📅 Calendar", "📧 Emails", "📚 Reference", "📝 Notes"])
-tab_issues, tab_agenda, tab_actions, tab_calendar, tab_emails, tab_ref, tab_notes = tabs
+tabs = st.tabs(["🔴 Issues", "💬 1:1 Agenda", "✅ Action Items", "📅 Calendar", "📧 Emails", "🗒 Meetings", "🔬 Scripts", "📚 Reference", "📝 Notes"])
+tab_issues, tab_agenda, tab_actions, tab_calendar, tab_emails, tab_meetings, tab_scripts, tab_ref, tab_notes = tabs
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -267,6 +285,8 @@ with tab_actions:
             ac_owner = st.selectbox("Owner", ["Me"] + st.session_state.direct_reports, key="ac_owner")
             ac_due   = st.date_input("Due date", key="ac_due")
             ac_src   = st.selectbox("From", ["1:1","Team Meeting","Issue","Email","Other"], key="ac_src")
+            ac_notes = st.text_area("Notes / context", key="ac_notes", height=80,
+                                    placeholder="What exactly needs to be done? Any context?")
             if st.button("Add Action", type="primary", use_container_width=True):
                 if not ac_task.strip():
                     st.warning("Task required.")
@@ -274,7 +294,8 @@ with tab_actions:
                     save(dm().append_row, "ActionItems", {
                         "Task": ac_task.strip(), "Owner": ac_owner,
                         "Due": str(ac_due), "Source": ac_src,
-                        "Status": "Pending", "Created": str(date.today()),
+                        "Status": "Pending", "Notes": ac_notes.strip(),
+                        "Created": str(date.today()),
                     }, success_msg="Added!")
 
     with col_v:
@@ -307,6 +328,7 @@ with tab_actions:
                         c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
                         c1.markdown(f"{'🚨 ' if overdue else ''}**{row.get('Task','')}**")
                         c1.caption(f"👤 {row.get('Owner','')}  ·  📅 {row.get('Due','')}")
+                        if row.get("Notes"): c1.markdown(f"<small style='color:#64748b'>{row['Notes']}</small>", unsafe_allow_html=True)
                         choices = ["Pending","In Progress","Done"]
                         cur = row.get("Status","Pending")
                         ns = c2.selectbox("", choices, index=choices.index(cur) if cur in choices else 0, key=f"acs_{idx}", label_visibility="collapsed")
@@ -445,6 +467,170 @@ with tab_emails:
                         save(dm().update_cell, "Emails", idx, "Status", ns, success_msg="Updated!")
                     if c4.button("🗑", key=f"emd_{idx}", use_container_width=True):
                         save(dm().delete_row, "Emails", idx, success_msg="Deleted!")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MEETINGS
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_meetings:
+    st.markdown('<div class="section-header">Meeting Summaries</div>', unsafe_allow_html=True)
+    col_f, col_v = st.columns([1, 2], gap="large")
+
+    with col_f:
+        with st.container(border=True):
+            st.markdown("**➕ Log a meeting**")
+            mt_title     = st.text_input("Meeting title", key="mt_title", placeholder="e.g. Weekly team sync")
+            mt_date      = st.date_input("Date", key="mt_date")
+            mt_type      = st.selectbox("Type", ["1:1","Team Meeting","Stakeholder","Interview","Planning","Retrospective","Other"], key="mt_type")
+            mt_attendees = st.multiselect("Attendees", st.session_state.direct_reports, key="mt_att")
+            mt_other_att = st.text_input("Other attendees (comma-separated)", key="mt_other_att", placeholder="e.g. John Smith, Sarah Lee")
+            mt_summary   = st.text_area("Summary", key="mt_summary", height=100,
+                                        placeholder="What was discussed? Key points?")
+            mt_decisions = st.text_area("Decisions / outcomes", key="mt_decisions", height=80,
+                                        placeholder="What was decided? What will happen next?")
+            if st.button("Save Meeting", type="primary", use_container_width=True):
+                if not mt_title.strip():
+                    st.warning("Title required.")
+                else:
+                    all_att = mt_attendees + [a.strip() for a in mt_other_att.split(",") if a.strip()]
+                    save(dm().append_row, "Meetings", {
+                        "Title": mt_title.strip(),
+                        "Date": str(mt_date),
+                        "Attendees": ", ".join(all_att),
+                        "Type": mt_type,
+                        "Summary": mt_summary.strip(),
+                        "Decisions": mt_decisions.strip(),
+                        "Created": str(date.today()),
+                    }, success_msg="Meeting saved!")
+
+    with col_v:
+        df = get_data("Meetings", v())
+        if df.empty:
+            st.info("No meetings logged yet.")
+        else:
+            # Search + filter
+            sc1, sc2 = st.columns([2, 1])
+            search  = sc1.text_input("🔍 Search", key="mt_search")
+            all_types = ["All"] + sorted(df["Type"].dropna().unique().tolist()) if "Type" in df.columns else ["All"]
+            f_type  = sc2.selectbox("Type", all_types, key="mt_type_filter")
+
+            view = df.copy()
+            if "Date" in view.columns:
+                view = view.sort_values("Date", ascending=False)
+            if search:
+                view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
+            if f_type != "All" and "Type" in view.columns:
+                view = view[view["Type"] == f_type]
+
+            # Summary table
+            dcols = [c for c in ["Date","Title","Type","Attendees"] if c in view.columns]
+            st.dataframe(view[dcols], use_container_width=True, hide_index=True)
+
+            for idx, row in view.iterrows():
+                with st.expander(f"**{row.get('Title','')}**  ·  {row.get('Date','')}  ·  {row.get('Type','')}"):
+                    if row.get("Attendees"):
+                        st.caption(f"👥 {row['Attendees']}")
+                    if row.get("Summary"):
+                        st.markdown("**Summary:**")
+                        st.markdown(row["Summary"])
+                    if row.get("Decisions"):
+                        st.markdown("**Decisions / outcomes:**")
+                        st.success(row["Decisions"])
+                    if st.button("🗑 Delete", key=f"mtd_{idx}"):
+                        save(dm().delete_row, "Meetings", idx, success_msg="Deleted!")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SCRIPTS
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_scripts:
+    st.markdown('<div class="section-header">Script Review</div>', unsafe_allow_html=True)
+    st.caption("Paste scripts here and annotate them with notes, issues, and questions for review.")
+    col_f, col_v = st.columns([1, 2], gap="large")
+
+    with col_f:
+        with st.container(border=True):
+            st.markdown("**➕ Add a script**")
+            sc_title  = st.text_input("Title", key="sc_title", placeholder="e.g. User onboarding flow")
+            sc_lang   = st.selectbox("Language", ["SQL","Python","Shell / Bash","JavaScript","Other"], key="sc_lang")
+            sc_status = st.selectbox("Status", ["Under Review","Has Issues","Approved","Needs Rewrite"], key="sc_status")
+            sc_script = st.text_area("Script", key="sc_script", height=180,
+                                     placeholder="Paste the script here...")
+            sc_notes  = st.text_area("General notes", key="sc_notes", height=80,
+                                     placeholder="Overview, context, what this script does...")
+            sc_issues = st.text_area("Issues", key="sc_issues", height=80,
+                                     placeholder="What's wrong or unclear?")
+            sc_qs     = st.text_area("Questions", key="sc_qs", height=80,
+                                     placeholder="Things you need to find out or clarify...")
+            if st.button("Save Script", type="primary", use_container_width=True):
+                if not sc_title.strip():
+                    st.warning("Title required.")
+                else:
+                    save(dm().append_row, "Scripts", {
+                        "Title":     sc_title.strip(),
+                        "Language":  sc_lang,
+                        "Script":    sc_script.strip(),
+                        "Notes":     sc_notes.strip(),
+                        "Issues":    sc_issues.strip(),
+                        "Questions": sc_qs.strip(),
+                        "Status":    sc_status,
+                        "Created":   datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    }, success_msg="Script saved!")
+
+    with col_v:
+        df = get_data("Scripts", v())
+        if df.empty:
+            st.info("No scripts yet.")
+        else:
+            sc1, sc2 = st.columns([2, 1])
+            search   = sc1.text_input("🔍 Search", key="sc_search")
+            all_st   = ["All"] + sorted(df["Status"].dropna().unique().tolist()) if "Status" in df.columns else ["All"]
+            f_status = sc2.selectbox("Status", all_st, key="sc_status_filter")
+
+            view = df.copy().iloc[::-1]
+            if search:
+                view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
+            if f_status != "All" and "Status" in view.columns:
+                view = view[view["Status"] == f_status]
+
+            dcols = [c for c in ["Title","Language","Status","Created"] if c in view.columns]
+            st.dataframe(view[dcols], use_container_width=True, hide_index=True)
+
+            status_icon = {"Under Review": "🔍", "Has Issues": "🚨", "Approved": "✅", "Needs Rewrite": "🔄"}
+
+            for idx, row in view.iterrows():
+                icon = status_icon.get(row.get("Status",""), "📄")
+                with st.expander(f"{icon} **{row.get('Title','')}**  ·  `{row.get('Language','')}`  ·  {row.get('Status','')}"):
+
+                    if row.get("Notes"):
+                        st.markdown("**Overview / Notes:**")
+                        st.markdown(row["Notes"])
+
+                    if row.get("Script"):
+                        lang_map = {"SQL":"sql","Python":"python","Shell / Bash":"bash","JavaScript":"javascript"}
+                        lang = lang_map.get(row.get("Language",""), "text")
+                        st.markdown("**Script:**")
+                        st.code(row["Script"], language=lang)
+
+                    if row.get("Issues"):
+                        st.markdown("**⚠️ Issues:**")
+                        st.error(row["Issues"])
+
+                    if row.get("Questions"):
+                        st.markdown("**❓ Questions:**")
+                        st.warning(row["Questions"])
+
+                    # Inline edit status
+                    ec1, ec2, ec3 = st.columns([2, 1, 1])
+                    choices = ["Under Review","Has Issues","Approved","Needs Rewrite"]
+                    cur = row.get("Status","Under Review")
+                    ns = ec1.selectbox("Update status", choices,
+                                       index=choices.index(cur) if cur in choices else 0,
+                                       key=f"sc_st_{idx}")
+                    if ec2.button("💾 Save", key=f"sc_sv_{idx}", use_container_width=True):
+                        save(dm().update_cell, "Scripts", idx, "Status", ns, success_msg="Updated!")
+                    if ec3.button("🗑 Delete", key=f"sc_dl_{idx}", use_container_width=True):
+                        save(dm().delete_row, "Scripts", idx, success_msg="Deleted!")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
