@@ -128,23 +128,42 @@ class SheetsManager:
         self._gc = gspread.authorize(creds)
         self._sh = self._gc.open_by_key(spreadsheet_id)
 
+    def _refresh_ws_cache(self):
+        """Load all worksheet objects in one API call and cache them."""
+        self._ws_map = {ws.title: ws for ws in self._sh.worksheets()}
+
+    def _ws(self, name: str):
+        if not hasattr(self, '_ws_map'):
+            self._refresh_ws_cache()
+        if name not in self._ws_map:
+            # Try to create it
+            try:
+                cols = SCHEMAS.get(name, [])
+                ws = self._sh.add_worksheet(title=name, rows=1000, cols=max(len(cols), 10))
+                ws.append_row(cols)
+                self._ws_map[name] = ws
+            except Exception:
+                self._refresh_ws_cache()  # maybe it was created elsewhere
+        return self._ws_map[name]
+
     def ensure_worksheets(self):
-        existing = {ws.title for ws in self._sh.worksheets()}
+        self._refresh_ws_cache()
         for name, cols in SCHEMAS.items():
-            if name not in existing:
+            if name not in self._ws_map:
                 try:
                     ws = self._sh.add_worksheet(title=name, rows=1000, cols=max(len(cols), 10))
                     ws.append_row(cols)
+                    self._ws_map[name] = ws
                 except Exception:
                     pass
 
-    def _ws(self, name: str):
-        return self._sh.worksheet(name)
-
     def get_data(self, sheet: str) -> pd.DataFrame:
-        ws = self._ws(sheet)
-        records = ws.get_all_records(default_blank="")
-        return pd.DataFrame(records) if records else pd.DataFrame(columns=SCHEMAS.get(sheet, []))
+        try:
+            ws = self._ws(sheet)
+            records = ws.get_all_records(default_blank="")
+            return pd.DataFrame(records) if records else pd.DataFrame(columns=SCHEMAS.get(sheet, []))
+        except Exception:
+            return pd.DataFrame(columns=SCHEMAS.get(sheet, []))
 
     def append_row(self, sheet: str, row_dict: dict):
         ws = self._ws(sheet)
