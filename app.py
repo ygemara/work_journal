@@ -58,29 +58,19 @@ except Exception as e:
 
 if "direct_reports" not in st.session_state:
     st.session_state.direct_reports = _sm.get_direct_reports()
-if "cache_v" not in st.session_state:
-    st.session_state.cache_v = 0
-
 
 def dm() -> SheetsManager:
     return get_manager()
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def get_data(sheet: str, _v: int = 0) -> pd.DataFrame:
+def get_data(sheet: str) -> pd.DataFrame:
     return get_manager().get_data(sheet)
 
 
-def bust():
-    """Increment cache version so next get_data call re-fetches."""
-    st.session_state.cache_v += 1
-
-
 def save(fn, *args, success_msg="Saved!", **kwargs):
-    """Call a write fn. On success bust cache and rerun. On error show message."""
+    """Call a write fn. On success rerun. On error show message."""
     try:
         fn(*args, **kwargs)
-        bust()
         if success_msg:
             st.toast(success_msg)
         st.rerun()
@@ -89,7 +79,7 @@ def save(fn, *args, success_msg="Saved!", **kwargs):
 
 
 def v():
-    return st.session_state.cache_v
+    return 0
 
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
@@ -130,9 +120,9 @@ c0.caption(date.today().strftime("%A, %B %d, %Y"))
 c_status.success("☁️ Connected")
 
 try:
-    _i = get_data("Issues", v())
-    _a = get_data("ActionItems", v())
-    _e = get_data("Emails", v())
+    _i = get_data("Issues")
+    _a = get_data("ActionItems")
+    _e = get_data("Emails")
     open_issues     = int((_i["Status"] == "Open").sum())           if not _i.empty and "Status" in _i.columns else 0
     high_pri        = int(((_i["Status"] == "Open") & (_i["Priority"] == "High")).sum()) if not _i.empty else 0
     pending_actions = int((_a["Status"] == "Pending").sum())        if not _a.empty and "Status" in _a.columns else 0
@@ -178,7 +168,7 @@ with tab_issues:
                     }, success_msg="Issue logged!")
 
     with col_list:
-        df = get_data("Issues", v())
+        df = get_data("Issues")
         if df.empty:
             st.info("No issues yet.")
         else:
@@ -238,7 +228,7 @@ with tab_agenda:
                         }, success_msg="Added!")
 
         with col_view:
-            df = get_data("Agenda", v())
+            df = get_data("Agenda")
             person_df = df[df["Person"] == selected] if not df.empty and "Person" in df.columns else pd.DataFrame()
             show_done = st.toggle("Show discussed", False, key="ag_show_done")
 
@@ -299,7 +289,7 @@ with tab_actions:
                     }, success_msg="Added!")
 
     with col_v:
-        df = get_data("ActionItems", v())
+        df = get_data("ActionItems")
         if df.empty:
             st.info("No action items yet.")
         else:
@@ -375,7 +365,7 @@ with tab_calendar:
                     }, success_msg="Event added!")
 
     with col_v:
-        df = get_data("Calendar", v())
+        df = get_data("Calendar")
         today_str = str(date.today())
         if df.empty:
             st.info("No events yet.")
@@ -437,7 +427,7 @@ with tab_emails:
                     }, success_msg="Saved!")
 
     with col_v:
-        df = get_data("Emails", v())
+        df = get_data("Emails")
         if df.empty:
             st.info("No emails logged yet.")
         else:
@@ -504,7 +494,7 @@ with tab_meetings:
                     }, success_msg="Meeting saved!")
 
     with col_v:
-        df = get_data("Meetings", v())
+        df = get_data("Meetings")
         if df.empty:
             st.info("No meetings logged yet.")
         else:
@@ -578,7 +568,7 @@ with tab_scripts:
                     }, success_msg="Script saved!")
 
     with col_v:
-        df = get_data("Scripts", v())
+        df = get_data("Scripts")
         if df.empty:
             st.info("No scripts yet.")
         else:
@@ -660,7 +650,7 @@ with tab_ref:
                     }, success_msg="Saved!")
 
     with col_view:
-        df = get_data("Reference", v())
+        df = get_data("Reference")
         if df.empty:
             st.info("Nothing saved yet.")
         else:
@@ -717,7 +707,7 @@ with tab_notes:
                     }, success_msg="Saved!")
 
     with col_v:
-        df = get_data("Notes", v())
+        df = get_data("Notes")
         if df.empty:
             st.info("No notes yet.")
         else:
