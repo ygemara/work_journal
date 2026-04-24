@@ -40,7 +40,7 @@ def safe_write(fn, *args, **kwargs):
 
 # ── auto-connect from secrets ─────────────────────────────────────────────────
 
-if "dm" not in st.session_state:
+if "dm" not in st.session_state or not isinstance(st.session_state.dm, SheetsManager):
     try:
         sid   = st.secrets["sheet_id"]
         creds = dict(st.secrets["gcp_service_account"])
