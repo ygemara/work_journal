@@ -733,54 +733,34 @@ with tab_ref:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# NOTES
+# NOTES — scratchpad
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_notes:
     st.markdown('<div class="section-header">Notes</div>', unsafe_allow_html=True)
-    col_f, col_v = st.columns([1, 2], gap="large")
+    st.caption("A free-form scratchpad. Just type. Saved to your Google Sheet.")
 
-    with col_f:
-        with st.container(border=True):
-            st.markdown("**➕ New note**")
-            n_title = st.text_input("Title", key="n_title")
-            n_tags  = st.text_input("Tags (optional)", key="n_tags", placeholder="e.g. strategy, HR")
-            n_link  = st.text_input("Link to person (optional)", key="n_link", placeholder="e.g. Jane Smith")
-            n_body  = st.text_area("Note", key="n_body", height=140)
-            if st.button("Save Note", type="primary", use_container_width=True):
-                if not n_title.strip() or not n_body.strip():
-                    st.warning("Title and note required.")
-                else:
-                    save(dm().append_row, "Notes", {
-                        "Title": n_title.strip(), "Tags": n_tags.strip(),
-                        "LinkedTo": n_link.strip(),
-                        "Body": n_body.strip(),
-                        "Created": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    }, success_msg="Saved!")
+    # Load current scratchpad content once
+    if "scratchpad_loaded" not in st.session_state:
+        try:
+            st.session_state.scratchpad = dm().get_scratchpad()
+        except Exception:
+            st.session_state.scratchpad = ""
+        st.session_state.scratchpad_loaded = True
 
-    with col_v:
-        df = get_data("Notes")
-        if df.empty:
-            st.info("No notes yet.")
-        else:
-            search = st.text_input("🔍 Search", key="n_search")
-            view = df.copy().reset_index(drop=False).iloc[::-1]
-            if search: view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
+    text = st.text_area(
+        "Scratchpad",
+        value=st.session_state.scratchpad,
+        height=600,
+        label_visibility="collapsed",
+        placeholder="Start typing your notes here...",
+        key="scratchpad_input",
+    )
 
-            edit_df = add_delete_col(view[[c for c in ["index","Title","Tags","LinkedTo","Created"] if c in view.columns]])
-            edited = st.data_editor(edit_df, column_config={
-                "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
-                "index":  st.column_config.Column("Row", disabled=True, width="small"),
-            }, use_container_width=True, hide_index=True, key="notes_editor")
-            if st.button("🗑 Delete selected", key="notes_del", use_container_width=True):
-                to_del = edited[edited["Delete"] == True]["index"].tolist()
-                for idx in sorted(to_del, reverse=True):
-                    dm().delete_row("Notes", int(idx))
-                get_data.clear()
-                st.rerun()
-
-            st.markdown("---")
-            for _, row in view.iterrows():
-                with st.expander(f"**{row.get('Title','')}**  ·  {row.get('Created','')}"):
-                    if row.get("Tags"):    st.caption(f"🏷 {row['Tags']}")
-                    if row.get("LinkedTo"): st.caption(f"👤 {row['LinkedTo']}")
-                    st.markdown(row.get("Body",""))
+    c1, c2 = st.columns([1, 4])
+    if c1.button("💾 Save", type="primary", use_container_width=True):
+        try:
+            dm().set_scratchpad(text)
+            st.session_state.scratchpad = text
+            st.toast("Saved!")
+        except Exception as e:
+            st.error(f"❌ {e}")
