@@ -42,11 +42,14 @@ def safe_write(fn, *args, **kwargs):
 
 if "dm" not in st.session_state:
     try:
-        sid   = st.secrets.get("spreadsheet_id", "")
-        creds = dict(st.secrets.get("gcp_service_account", {}))
-        if not sid or sid == "PASTE_YOUR_SPREADSHEET_ID_HERE" or not creds:
-            st.error("❌ Secrets not configured. Add spreadsheet_id and gcp_service_account to Streamlit secrets.")
+        all_secrets = dict(st.secrets)
+        sid   = all_secrets.get("spreadsheet_id", "")
+        creds = dict(all_secrets.get("gcp_service_account", {}))
+
+        if not sid or not creds:
+            st.error(f"❌ Secrets not configured correctly. Found keys: {list(all_secrets.keys())}")
             st.stop()
+
         sm = SheetsManager(creds, sid)
         sm.ensure_worksheets()
         st.session_state.dm   = sm
