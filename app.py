@@ -42,12 +42,11 @@ def safe_write(fn, *args, **kwargs):
 
 if "dm" not in st.session_state:
     try:
-        all_secrets = dict(st.secrets)
-        sid   = all_secrets.get("spreadsheet_id", "")
-        creds = dict(all_secrets.get("gcp_service_account", {}))
+        sid   = st.secrets["sheet_id"]
+        creds = dict(st.secrets["gcp_service_account"])
 
         if not sid or not creds:
-            st.error(f"❌ Secrets not configured correctly. Found keys: {list(all_secrets.keys())}")
+            st.error(f"❌ spreadsheet_id or gcp_service_account is empty in secrets.")
             st.stop()
 
         sm = SheetsManager(creds, sid)
