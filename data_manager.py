@@ -214,3 +214,20 @@ class SheetsManager:
                 current = [x.strip() for x in str(r.get("Value", "")).split(",") if x.strip()]
                 ws.update_cell(i + 2, 2, ", ".join(x for x in current if x != name))
                 return
+
+    def get_scratchpad(self) -> str:
+        ws = self._ws("Config")
+        records = ws.get_all_records(default_blank="")
+        for r in records:
+            if r.get("Key") == "Scratchpad":
+                return r.get("Value", "")
+        return ""
+
+    def set_scratchpad(self, text: str):
+        ws = self._ws("Config")
+        records = ws.get_all_records(default_blank="")
+        for i, r in enumerate(records):
+            if r.get("Key") == "Scratchpad":
+                ws.update_cell(i + 2, 2, text)
+                return
+        ws.append_row(["Scratchpad", text])
