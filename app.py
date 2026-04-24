@@ -171,7 +171,7 @@ with tab_issues:
             i_title    = st.text_input("Title", key="i_title")
             i_desc     = st.text_area("Detail (optional)", key="i_desc", height=80)
             i_priority = st.selectbox("Priority", ["High", "Medium", "Low"], key="i_priority")
-            i_owner    = st.selectbox("Owner", ["(Unassigned)"] + st.session_state.direct_reports, key="i_owner")
+            i_owner    = st.text_input("Owner", key="i_owner", placeholder="e.g. Jane Smith")
             i_due      = st.date_input("Due (optional)", value=None, key="i_due")
             if st.button("Add Issue", type="primary", use_container_width=True):
                 if not i_title.strip():
@@ -198,7 +198,7 @@ with tab_issues:
             if "Priority" in view.columns:
                 view = view.assign(_s=view["Priority"].map({"High":0,"Medium":1,"Low":2}).fillna(9)).sort_values("_s").drop(columns=["_s"])
 
-            edit_df = add_delete_col(view[[c for c in ["index","Title","Priority","Owner","Due","Status","Description"] if c in view.columns]])
+            edit_df = add_delete_col(view[[c for c in ["index","Title","Priority","Owner","Created","Status","Description"] if c in view.columns]])
             edited = st.data_editor(
                 edit_df,
                 column_config={
@@ -250,7 +250,7 @@ with tab_agenda:
                 st.markdown(f"**➕ Add topic for {selected}**")
                 a_topic    = st.text_area("Topic", key="a_topic", height=80)
                 a_type     = st.selectbox("Category", ["Update","Feedback","Blocker","Development","Recognition","Other"], key="a_type")
-                a_added_by = st.radio("Added by", ["Me", selected], horizontal=True, key="a_by")
+                a_added_by = st.text_input("Added by", key="a_by", value="Me")
                 if st.button("Add to Agenda", type="primary", use_container_width=True):
                     if not a_topic.strip():
                         st.warning("Topic required.")
@@ -321,7 +321,7 @@ with tab_actions:
         with st.container(border=True):
             st.markdown("**➕ New action item**")
             ac_task  = st.text_input("Task", key="ac_task")
-            ac_owner = st.selectbox("Owner", ["Me"] + st.session_state.direct_reports, key="ac_owner")
+            ac_owner = st.text_input("Owner", key="ac_owner", placeholder="e.g. Me, Jane Smith")
             ac_due   = st.date_input("Due date", key="ac_due")
             ac_src   = st.selectbox("From", ["1:1","Team Meeting","Issue","Email","Other"], key="ac_src")
             ac_notes = st.text_area("Notes / context", key="ac_notes", height=80,
@@ -357,7 +357,7 @@ with tab_actions:
                     view = view.copy()
                     view["⚠️"] = view.apply(lambda r: "🚨" if str(r.get("Due","")) < today_str and r.get("Status") == "Pending" else "", axis=1)
                 edit_cols = [c for c in ["Delete","⚠️","index","Task","Owner","Due","Status","Notes","Source"] if c in ["Delete","⚠️","index"] or c in view.columns]
-                edit_df = add_delete_col(view[[c for c in ["index","⚠️","Task","Owner","Due","Status","Notes"] if c in view.columns or c in ["index","⚠️"]]])
+                edit_df = add_delete_col(view[[c for c in ["index","⚠️","Task","Owner","Created","Due","Status","Notes"] if c in view.columns or c in ["index","⚠️"]]])
                 edited = st.data_editor(
                     edit_df,
                     column_config={
@@ -533,18 +533,18 @@ with tab_meetings:
             mt_title     = st.text_input("Meeting title", key="mt_title")
             mt_date      = st.date_input("Date", key="mt_date")
             mt_type      = st.selectbox("Type", ["1:1","Team Meeting","Stakeholder","Interview","Planning","Retrospective","Other"], key="mt_type")
-            mt_attendees = st.multiselect("Attendees", st.session_state.direct_reports, key="mt_att")
-            mt_other_att = st.text_input("Other attendees", key="mt_other_att", placeholder="e.g. John Smith, Sarah Lee")
+            mt_attendees_text = st.text_input("Attendees", key="mt_att", placeholder="e.g. Jane, John, Sarah")
+
             mt_summary   = st.text_area("Summary", key="mt_summary", height=100)
             mt_decisions = st.text_area("Decisions / outcomes", key="mt_decisions", height=80)
             if st.button("Save Meeting", type="primary", use_container_width=True):
                 if not mt_title.strip():
                     st.warning("Title required.")
                 else:
-                    all_att = mt_attendees + [a.strip() for a in mt_other_att.split(",") if a.strip()]
+                    all_att = mt_attendees_text
                     save(dm().append_row, "Meetings", {
                         "Title": mt_title.strip(), "Date": str(mt_date),
-                        "Attendees": ", ".join(all_att), "Type": mt_type,
+                        "Attendees": all_att.strip(), "Type": mt_type,
                         "Summary": mt_summary.strip(), "Decisions": mt_decisions.strip(),
                         "Created": str(date.today()),
                     }, success_msg="Meeting saved!")
@@ -743,16 +743,16 @@ with tab_notes:
         with st.container(border=True):
             st.markdown("**➕ New note**")
             n_title = st.text_input("Title", key="n_title")
-            n_tags  = st.multiselect("Tags", ["Strategy","HR","Technical","Process","Personal","Meeting","Other"], key="n_tags")
-            n_link  = st.selectbox("Link to person (optional)", ["—"] + st.session_state.direct_reports, key="n_link")
+            n_tags  = st.text_input("Tags (optional)", key="n_tags", placeholder="e.g. strategy, HR")
+            n_link  = st.text_input("Link to person (optional)", key="n_link", placeholder="e.g. Jane Smith")
             n_body  = st.text_area("Note", key="n_body", height=140)
             if st.button("Save Note", type="primary", use_container_width=True):
                 if not n_title.strip() or not n_body.strip():
                     st.warning("Title and note required.")
                 else:
                     save(dm().append_row, "Notes", {
-                        "Title": n_title.strip(), "Tags": ", ".join(n_tags),
-                        "LinkedTo": n_link if n_link != "—" else "",
+                        "Title": n_title.strip(), "Tags": n_tags.strip(),
+                        "LinkedTo": n_link.strip(),
                         "Body": n_body.strip(),
                         "Created": datetime.now().strftime("%Y-%m-%d %H:%M"),
                     }, success_msg="Saved!")
