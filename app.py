@@ -57,7 +57,10 @@ except Exception as e:
     st.stop()
 
 if "direct_reports" not in st.session_state:
-    st.session_state.direct_reports = _sm.get_direct_reports()
+    try:
+        st.session_state.direct_reports = _sm.get_direct_reports()
+    except Exception:
+        st.session_state.direct_reports = []
 
 def dm() -> SheetsManager:
     return get_manager()
