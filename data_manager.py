@@ -1,15 +1,6 @@
-"""
-data_manager.py — Unified data layer.
-
-Two modes:
-  LOCAL  — reads/writes a local JSON file (data.json). Works immediately, no setup.
-  SHEETS — reads/writes Google Sheets. Optional; for cloud persistence & sharing.
-"""
-
 import json
 import os
 import pandas as pd
-from datetime import datetime
 from typing import Any
 
 LOCAL_FILE = "data.json"
@@ -19,6 +10,7 @@ SCHEMAS: dict[str, list[str]] = {
     "Agenda":      ["Person", "Topic", "Category", "AddedBy", "Discussed", "Created"],
     "ActionItems": ["Task", "Owner", "Due", "Source", "Status", "Created"],
     "Calendar":    ["Title", "Date", "Time", "Type", "With", "Notes"],
+    "Emails":      ["Subject", "From", "Received", "Priority", "Action", "Status", "Notes", "Created"],
     "Reference":   ["Title", "Category", "Content", "Explanation", "Tags", "Created"],
     "Notes":       ["Title", "Tags", "LinkedTo", "Body", "Created"],
     "Config":      ["Key", "Value"],
@@ -40,8 +32,6 @@ def _save_local(data: dict):
 
 
 class LocalManager:
-    """Stores everything in a local data.json file."""
-
     def get_data(self, sheet: str) -> pd.DataFrame:
         data = _load_local()
         sheet_data = data.get(sheet, {"columns": SCHEMAS.get(sheet, []), "rows": []})
@@ -102,6 +92,16 @@ class LocalManager:
         data["Config"] = cfg
         _save_local(data)
 
+    def remove_direct_report(self, name: str):
+        data = _load_local()
+        cfg = data.get("Config", {"columns": ["Key", "Value"], "rows": []})
+        for row in cfg["rows"]:
+            if row[0] == "DirectReports":
+                current = [x.strip() for x in str(row[1]).split(",") if x.strip()]
+                row[1] = ", ".join(x for x in current if x != name)
+                _save_local(data)
+                return
+
 
 # ── Google Sheets backend ─────────────────────────────────────────────────────
 
@@ -119,21 +119,25 @@ SCOPES = [
 
 
 class SheetsManager:
-    """Stores everything in a Google Sheets spreadsheet."""
-
     def __init__(self, creds_dict: dict, spreadsheet_id: str):
         if not GSPREAD_AVAILABLE:
-            raise ImportError("gspread is not installed. Run: pip install gspread google-auth")
+            raise ImportError("gspread not installed")
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         self._gc = gspread.authorize(creds)
         self._sh = self._gc.open_by_key(spreadsheet_id)
 
     def ensure_worksheets(self):
-        existing = {ws.title for ws in self._sh.worksheets()}
-        for name, cols in SCHEMAS.items():
-            if name not in existing:
-                ws = self._sh.add_worksheet(title=name, rows=1000, cols=max(len(cols), 10))
-                ws.append_row(cols)
+        try:
+            existing = {ws.title for ws in self._sh.worksheets()}
+            for name, cols in SCHEMAS.items():
+                if name not in existing:
+                    try:
+                        ws = self._sh.add_worksheet(title=name, rows=1000, cols=max(len(cols), 10))
+                        ws.append_row(cols)
+                    except Exception:
+                        pass  # sheet already exists, skip
+        except Exception:
+            pass
 
     def _ws(self, name: str):
         return self._sh.worksheet(name)
@@ -146,7 +150,7 @@ class SheetsManager:
     def append_row(self, sheet: str, row_dict: dict):
         ws = self._ws(sheet)
         cols = SCHEMAS.get(sheet, list(row_dict.keys()))
-        row = [row_dict.get(c, "") for c in cols]
+        row = [str(row_dict.get(c, "")) for c in cols]
         ws.append_row(row, value_input_option="USER_ENTERED")
 
     def update_cell(self, sheet: str, df_index: int, column: str, value: Any):
@@ -177,9 +181,18 @@ class SheetsManager:
         records = ws.get_all_records(default_blank="")
         for i, r in enumerate(records):
             if r.get("Key") == "DirectReports":
-                current = [x.strip() for x in str(r.get("Value","")).split(",") if x.strip()]
+                current = [x.strip() for x in str(r.get("Value", "")).split(",") if x.strip()]
                 if name not in current:
                     current.append(name)
                     ws.update_cell(i + 2, 2, ", ".join(current))
                 return
         ws.append_row(["DirectReports", name])
+
+    def remove_direct_report(self, name: str):
+        ws = self._ws("Config")
+        records = ws.get_all_records(default_blank="")
+        for i, r in enumerate(records):
+            if r.get("Key") == "DirectReports":
+                current = [x.strip() for x in str(r.get("Value", "")).split(",") if x.strip()]
+                ws.update_cell(i + 2, 2, ", ".join(x for x in current if x != name))
+                return
