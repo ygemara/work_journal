@@ -555,38 +555,55 @@ with tab_meetings:
             st.info("No meetings logged yet.")
         else:
             sc1, sc2 = st.columns([2, 1])
-            search  = sc1.text_input("🔍 Search", key="mt_search")
+            search    = sc1.text_input("🔍 Search", key="mt_search")
             all_types = ["All"] + sorted(df["Type"].dropna().unique().tolist()) if "Type" in df.columns else ["All"]
-            f_type  = sc2.selectbox("Type", all_types, key="mt_type_filter")
+            f_type    = sc2.selectbox("Type", all_types, key="mt_type_filter")
 
             view = df.copy().reset_index(drop=False)
             if "Date" in view.columns: view = view.sort_values("Date", ascending=False)
             if search: view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
             if f_type != "All" and "Type" in view.columns: view = view[view["Type"] == f_type]
 
-            # Index table with delete
-            edit_df = add_delete_col(view[[c for c in ["index","Date","Title","Type","Attendees"] if c in view.columns]])
+            # Summary table
+            table_cols = [c for c in ["index","Date","Title","Type","Attendees"] if c in view.columns]
+            edit_df = add_delete_col(view[table_cols])
             edited = st.data_editor(edit_df, column_config={
                 "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
                 "index":  st.column_config.Column("Row", disabled=True, width="small"),
+                "Type":   st.column_config.SelectboxColumn("Type", options=["1:1","Team Meeting","Stakeholder","Interview","Planning","Retrospective","Other"]),
             }, use_container_width=True, hide_index=True, key="meetings_editor")
+
             if st.button("🗑 Delete selected", key="mt_del", use_container_width=True):
                 to_del = edited[edited["Delete"] == True]["index"].tolist()
-                for idx in sorted(to_del, reverse=True):
-                    dm().delete_row("Meetings", int(idx))
-                get_data.clear()
-                st.rerun()
+                if not to_del:
+                    st.info("Tick rows first.")
+                else:
+                    for idx in sorted(to_del, reverse=True):
+                        dm().delete_row("Meetings", int(idx))
+                    get_data.clear()
+                    st.rerun()
 
             st.markdown("---")
+            st.markdown("**Click a meeting to view or edit:**")
             for _, row in view.iterrows():
-                with st.expander(f"**{row.get('Title','')}**  ·  {row.get('Date','')}"):
+                orig_idx = int(row["index"])
+                with st.expander(f"**{row.get('Title','')}**  ·  {row.get('Date','')}  ·  {row.get('Type','')}"):
                     if row.get("Attendees"): st.caption(f"👥 {row['Attendees']}")
-                    if row.get("Summary"):
-                        st.markdown("**Summary:**")
-                        st.markdown(row["Summary"])
-                    if row.get("Decisions"):
-                        st.markdown("**Decisions:**")
-                        st.success(row["Decisions"])
+
+                    e_title     = st.text_input("Title",     value=row.get("Title",""),     key=f"mt_et_{orig_idx}")
+                    e_date      = st.text_input("Date",      value=row.get("Date",""),      key=f"mt_ed_{orig_idx}")
+                    e_att       = st.text_input("Attendees", value=row.get("Attendees",""), key=f"mt_ea_{orig_idx}")
+                    e_summary   = st.text_area("Summary",   value=row.get("Summary",""),   key=f"mt_es_{orig_idx}", height=100)
+                    e_decisions = st.text_area("Decisions", value=row.get("Decisions",""), key=f"mt_edc_{orig_idx}", height=80)
+
+                    if st.button("💾 Save changes", key=f"mt_sv_{orig_idx}", use_container_width=True):
+                        for col, val in [("Title", e_title), ("Date", e_date), ("Attendees", e_att),
+                                         ("Summary", e_summary), ("Decisions", e_decisions)]:
+                            if val != row.get(col, ""):
+                                dm().update_cell("Meetings", orig_idx, col, val)
+                        get_data.clear()
+                        st.toast("Saved!")
+                        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
