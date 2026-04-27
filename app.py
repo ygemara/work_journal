@@ -65,15 +65,27 @@ def dm() -> SheetsManager:
     return get_manager()
 
 
-@st.cache_data(ttl=120, show_spinner=False)
 def get_data(sheet: str) -> pd.DataFrame:
-    return get_manager().get_data(sheet)
+    """Read from session state cache. Fetches from Sheets only if not cached."""
+    key = f"_data_{sheet}"
+    if key not in st.session_state:
+        st.session_state[key] = get_manager().get_data(sheet)
+    return st.session_state[key]
 
 
-def save(fn, *args, success_msg="Saved!", **kwargs):
+def invalidate(sheet: str):
+    """Clear just one sheet from the cache so next get_data re-fetches it."""
+    key = f"_data_{sheet}"
+    if key in st.session_state:
+        del st.session_state[key]
+
+
+def save(fn, *args, sheet: str = None, success_msg="Saved!", **kwargs):
+    """Write, invalidate just the affected sheet, rerun."""
     try:
         fn(*args, **kwargs)
-        get_data.clear()
+        if sheet:
+            invalidate(sheet)
         if success_msg:
             st.toast(success_msg)
         st.rerun()
@@ -104,7 +116,9 @@ with st.sidebar:
 
     st.markdown("---")
     if st.button("🔄 Refresh data", use_container_width=True):
-        get_data.clear()
+        for k in list(st.session_state.keys()):
+            if k.startswith("_data_"):
+                del st.session_state[k]
         st.session_state.direct_reports = dm().get_direct_reports()
         st.rerun()
     st.caption(f"Refreshed: {datetime.now().strftime('%H:%M')}")
@@ -147,7 +161,7 @@ def delete_selected(sheet: str, df: pd.DataFrame, edited: pd.DataFrame):
         return
     for idx in sorted(to_delete, reverse=True):
         dm().delete_row(sheet, idx)
-    get_data.clear()
+    invalidate(sheet)
     st.toast(f"Deleted {len(to_delete)} row(s).")
     st.rerun()
 
@@ -182,7 +196,7 @@ with tab_issues:
                         "Priority": i_priority, "Owner": i_owner,
                         "Due": str(i_due) if i_due else "", "Status": "Open",
                         "Created": str(date.today()),
-                    }, success_msg="Issue logged!")
+                    }, sheet="Issues", success_msg="Issue logged!")
 
     with col_list:
         df = get_data("Issues")
@@ -219,7 +233,7 @@ with tab_issues:
                         dm().update_cell("Issues", orig_idx, "Status", row["Status"])
                     if row.get("Priority") != orig_row.get("Priority"):
                         dm().update_cell("Issues", orig_idx, "Priority", row["Priority"])
-                get_data.clear()
+                invalidate("Issues")
                 st.toast("Saved!")
                 st.rerun()
             if bc2.button("🗑 Delete selected", key="issues_del", use_container_width=True):
@@ -229,7 +243,7 @@ with tab_issues:
                 else:
                     for idx in sorted(to_del, reverse=True):
                         dm().delete_row("Issues", int(idx))
-                    get_data.clear()
+                    invalidate("Issues")
                     st.toast(f"Deleted {len(to_del)} row(s).")
                     st.rerun()
 
@@ -259,7 +273,7 @@ with tab_agenda:
                             "Person": selected, "Topic": a_topic.strip(),
                             "Category": a_type, "AddedBy": a_added_by,
                             "Discussed": "No", "Created": str(date.today()),
-                        }, success_msg="Added!")
+                        }, sheet="Agenda", success_msg="Added!")
 
         with col_view:
             df = get_data("Agenda")
@@ -291,7 +305,7 @@ with tab_agenda:
                         else:
                             for idx in checked:
                                 dm().update_cell("Agenda", int(idx), "Discussed", "Yes")
-                            get_data.clear()
+                            invalidate("Agenda")
                             st.toast("Marked done!")
                             st.rerun()
                     if bc2.button("🗑 Delete", key="ag_del", use_container_width=True):
@@ -301,7 +315,7 @@ with tab_agenda:
                         else:
                             for idx in sorted(to_del, reverse=True):
                                 dm().delete_row("Agenda", int(idx))
-                            get_data.clear()
+                            invalidate("Agenda")
                             st.rerun()
 
                 if show_done and not done.empty:
@@ -335,7 +349,7 @@ with tab_actions:
                         "Due": str(ac_due), "Source": ac_src,
                         "Status": "Pending", "Notes": ac_notes.strip(),
                         "Created": str(date.today()),
-                    }, success_msg="Added!")
+                    }, sheet="ActionItems", success_msg="Added!")
 
     with col_v:
         df = get_data("ActionItems")
@@ -374,7 +388,7 @@ with tab_actions:
                         orig_idx = int(row["index"])
                         if row.get("Status") != df.loc[orig_idx].get("Status"):
                             dm().update_cell("ActionItems", orig_idx, "Status", row["Status"])
-                    get_data.clear()
+                    invalidate("ActionItems")
                     st.toast("Saved!")
                     st.rerun()
                 if bc2.button("🗑 Delete selected", key="ac_del", use_container_width=True):
@@ -384,7 +398,6 @@ with tab_actions:
                     else:
                         for idx in sorted(to_del, reverse=True):
                             dm().delete_row("ActionItems", int(idx))
-                        get_data.clear()
                         st.rerun()
 
             done_df = df[df["Status"] == "Done"].reset_index(drop=False) if "Status" in df.columns else pd.DataFrame()
@@ -418,7 +431,7 @@ with tab_calendar:
                         "Time": str(ev_time)[:5] if ev_time else "",
                         "Type": ev_type, "With": ev_with.strip(),
                         "Notes": ev_notes.strip(),
-                    }, success_msg="Event added!")
+                    }, sheet="Calendar", success_msg="Event added!")
 
     with col_v:
         df = get_data("Calendar")
@@ -444,7 +457,6 @@ with tab_calendar:
                     to_del = edited[edited["Delete"] == True]["index"].tolist()
                     for idx in sorted(to_del, reverse=True):
                         dm().delete_row("Calendar", int(idx))
-                    get_data.clear()
                     st.rerun()
 
             if not past.empty:
@@ -477,7 +489,7 @@ with tab_emails:
                         "Received": str(em_received), "Priority": em_priority,
                         "Action": em_action.strip(), "Status": "Pending",
                         "Notes": em_notes.strip(), "Created": str(date.today()),
-                    }, success_msg="Saved!")
+                    }, sheet="Emails", success_msg="Saved!")
 
     with col_v:
         df = get_data("Emails")
@@ -509,14 +521,12 @@ with tab_emails:
                         dm().update_cell("Emails", orig_idx, "Status", row["Status"])
                     if row.get("Priority") != df.loc[orig_idx].get("Priority"):
                         dm().update_cell("Emails", orig_idx, "Priority", row["Priority"])
-                get_data.clear()
                 st.toast("Saved!")
                 st.rerun()
             if bc2.button("🗑 Delete selected", key="em_del", use_container_width=True):
                 to_del = edited[edited["Delete"] == True]["index"].tolist()
                 for idx in sorted(to_del, reverse=True):
                     dm().delete_row("Emails", int(idx))
-                get_data.clear()
                 st.rerun()
 
 
@@ -532,22 +542,21 @@ with tab_meetings:
             st.markdown("**➕ Log a meeting**")
             mt_title     = st.text_input("Meeting title", key="mt_title")
             mt_date      = st.date_input("Date", key="mt_date")
-            mt_type      = st.selectbox("Type", ["1:1","Team Meeting","Stakeholder","Interview","Planning","Retrospective","Other"], key="mt_type")
             mt_attendees_text = st.text_input("Attendees", key="mt_att", placeholder="e.g. Jane, John, Sarah")
-
-            mt_summary   = st.text_area("Summary", key="mt_summary", height=100)
-            mt_decisions = st.text_area("Decisions / outcomes", key="mt_decisions", height=80)
+            mt_notes     = st.text_area("Notes / summary", key="mt_notes", height=120,
+                                        placeholder="What was discussed?")
+            mt_questions = st.text_area("Outstanding questions", key="mt_questions", height=80,
+                                        placeholder="What's still unresolved?")
             if st.button("Save Meeting", type="primary", use_container_width=True):
                 if not mt_title.strip():
                     st.warning("Title required.")
                 else:
-                    all_att = mt_attendees_text
                     save(dm().append_row, "Meetings", {
                         "Title": mt_title.strip(), "Date": str(mt_date),
-                        "Attendees": all_att.strip(), "Type": mt_type,
-                        "Summary": mt_summary.strip(), "Decisions": mt_decisions.strip(),
+                        "Attendees": mt_attendees_text.strip(),
+                        "Notes": mt_notes.strip(), "Questions": mt_questions.strip(),
                         "Created": str(date.today()),
-                    }, success_msg="Meeting saved!")
+                    }, sheet="Meetings", success_msg="Meeting saved!")
 
     with col_v:
         df = get_data("Meetings")
@@ -565,12 +574,11 @@ with tab_meetings:
             if f_type != "All" and "Type" in view.columns: view = view[view["Type"] == f_type]
 
             # Summary table
-            table_cols = [c for c in ["index","Date","Title","Type","Attendees"] if c in view.columns]
+            table_cols = [c for c in ["index","Date","Title","Attendees"] if c in view.columns]
             edit_df = add_delete_col(view[table_cols])
             edited = st.data_editor(edit_df, column_config={
                 "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
                 "index":  st.column_config.Column("Row", disabled=True, width="small"),
-                "Type":   st.column_config.SelectboxColumn("Type", options=["1:1","Team Meeting","Stakeholder","Interview","Planning","Retrospective","Other"]),
             }, use_container_width=True, hide_index=True, key="meetings_editor")
 
             if st.button("🗑 Delete selected", key="mt_del", use_container_width=True):
@@ -580,28 +588,27 @@ with tab_meetings:
                 else:
                     for idx in sorted(to_del, reverse=True):
                         dm().delete_row("Meetings", int(idx))
-                    get_data.clear()
                     st.rerun()
 
             st.markdown("---")
             st.markdown("**Click a meeting to view or edit:**")
             for _, row in view.iterrows():
                 orig_idx = int(row["index"])
-                with st.expander(f"**{row.get('Title','')}**  ·  {row.get('Date','')}  ·  {row.get('Type','')}"):
+                with st.expander(f"**{row.get('Title','')}**  ·  {row.get('Date','')}  ·  {row.get('Attendees','')}"):
                     if row.get("Attendees"): st.caption(f"👥 {row['Attendees']}")
 
-                    e_title     = st.text_input("Title",     value=row.get("Title",""),     key=f"mt_et_{orig_idx}")
-                    e_date      = st.text_input("Date",      value=row.get("Date",""),      key=f"mt_ed_{orig_idx}")
-                    e_att       = st.text_input("Attendees", value=row.get("Attendees",""), key=f"mt_ea_{orig_idx}")
-                    e_summary   = st.text_area("Summary",   value=row.get("Summary",""),   key=f"mt_es_{orig_idx}", height=100)
-                    e_decisions = st.text_area("Decisions", value=row.get("Decisions",""), key=f"mt_edc_{orig_idx}", height=80)
+                    e_title     = st.text_input("Title",                value=row.get("Title",""),     key=f"mt_et_{orig_idx}")
+                    e_date      = st.text_input("Date",                 value=row.get("Date",""),      key=f"mt_ed_{orig_idx}")
+                    e_att       = st.text_input("Attendees",            value=row.get("Attendees",""), key=f"mt_ea_{orig_idx}")
+                    e_summary   = st.text_area("Notes / summary",      value=row.get("Notes",""),     key=f"mt_es_{orig_idx}", height=120)
+                    e_decisions = st.text_area("Outstanding questions", value=row.get("Questions",""), key=f"mt_edc_{orig_idx}", height=80)
 
                     if st.button("💾 Save changes", key=f"mt_sv_{orig_idx}", use_container_width=True):
                         for col, val in [("Title", e_title), ("Date", e_date), ("Attendees", e_att),
-                                         ("Summary", e_summary), ("Decisions", e_decisions)]:
+                                         ("Notes", e_summary), ("Questions", e_decisions)]:
                             if val != row.get(col, ""):
                                 dm().update_cell("Meetings", orig_idx, col, val)
-                        get_data.clear()
+                        invalidate("Meetings")
                         st.toast("Saved!")
                         st.rerun()
 
@@ -632,7 +639,7 @@ with tab_scripts:
                         "Script": sc_script.strip(), "Notes": sc_notes.strip(),
                         "Issues": sc_issues.strip(), "Questions": sc_qs.strip(),
                         "Status": sc_status, "Created": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    }, success_msg="Script saved!")
+                    }, sheet="Scripts", success_msg="Script saved!")
 
     with col_v:
         df = get_data("Scripts")
@@ -661,14 +668,12 @@ with tab_scripts:
                     orig_idx = int(row["index"])
                     if row.get("Status") != df.loc[orig_idx].get("Status"):
                         dm().update_cell("Scripts", orig_idx, "Status", row["Status"])
-                get_data.clear()
                 st.toast("Saved!")
                 st.rerun()
             if bc2.button("🗑 Delete selected", key="sc_del", use_container_width=True):
                 to_del = edited[edited["Delete"] == True]["index"].tolist()
                 for idx in sorted(to_del, reverse=True):
                     dm().delete_row("Scripts", int(idx))
-                get_data.clear()
                 st.rerun()
 
             st.markdown("---")
@@ -711,7 +716,7 @@ with tab_ref:
                         "Title": r_title.strip(), "Category": r_cat,
                         "Content": r_body.strip(), "Explanation": r_notes.strip(),
                         "Tags": r_tags.strip(), "Created": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    }, success_msg="Saved!")
+                    }, sheet="Reference", success_msg="Saved!")
 
     with col_view:
         df = get_data("Reference")
@@ -735,7 +740,6 @@ with tab_ref:
                 to_del = edited[edited["Delete"] == True]["index"].tolist()
                 for idx in sorted(to_del, reverse=True):
                     dm().delete_row("Reference", int(idx))
-                get_data.clear()
                 st.rerun()
 
             st.markdown("---")
