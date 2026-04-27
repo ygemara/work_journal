@@ -160,8 +160,14 @@ class SheetsManager:
     def get_data(self, sheet: str) -> pd.DataFrame:
         try:
             ws = self._ws(sheet)
+            # Fix header row if it doesn't match expected schema
+            expected = SCHEMAS.get(sheet, [])
+            if expected:
+                actual_headers = ws.row_values(1)
+                if actual_headers != expected:
+                    ws.update(range_name="1:1", values=[expected])
             records = ws.get_all_records(default_blank="")
-            return pd.DataFrame(records) if records else pd.DataFrame(columns=SCHEMAS.get(sheet, []))
+            return pd.DataFrame(records) if records else pd.DataFrame(columns=expected)
         except Exception:
             return pd.DataFrame(columns=SCHEMAS.get(sheet, []))
 
