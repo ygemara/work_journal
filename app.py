@@ -210,7 +210,7 @@ with tab_issues:
             if "Status"   in view.columns and f_status:   view = view[view["Status"].isin(f_status)]
             if "Priority" in view.columns and f_priority: view = view[view["Priority"].isin(f_priority)]
             if "Priority" in view.columns:
-                view = view.assign(_s=view["Priority"].map({"High":0,"Medium":1,"Low":2}).fillna(9)).sort_values("_s").drop(columns=["_s"])
+                view = view.assign(_s=view["Priority"].map({"High":0,"Medium":1,"Low":2}).fillna(9)).sort_values(["_s","Created"], ascending=[True,False]).drop(columns=["_s"])
 
             edit_df = add_delete_col(view[[c for c in ["index","Title","Priority","Owner","Created","Status","Description"] if c in view.columns]])
             edited = st.data_editor(
@@ -280,7 +280,8 @@ with tab_agenda:
             person_df = df[df["Person"] == selected].reset_index(drop=False) if not df.empty and "Person" in df.columns else pd.DataFrame()
             show_done = st.toggle("Show discussed", False, key="ag_show_done")
 
-            pending = person_df[person_df["Discussed"] == "No"]  if not person_df.empty and "Discussed" in person_df.columns else person_df
+            pending_raw = person_df[person_df["Discussed"] == "No"]  if not person_df.empty and "Discussed" in person_df.columns else person_df
+            pending = pending_raw.sort_values("Created", ascending=False) if "Created" in pending_raw.columns else pending_raw
             done    = person_df[person_df["Discussed"] == "Yes"] if not person_df.empty and "Discussed" in person_df.columns else pd.DataFrame()
 
             if person_df.empty:
@@ -361,6 +362,8 @@ with tab_actions:
             view = df.copy().reset_index(drop=False)
             if "Status" in view.columns:
                 view = view[view["Status"] != "Done"]
+            if "Created" in view.columns:
+                view = view.sort_values("Created", ascending=False)
             if f_owner != "Everyone" and "Owner" in view.columns:
                 view = view[view["Owner"] == f_owner]
 
@@ -503,7 +506,7 @@ with tab_emails:
             if "Status"   in view.columns and f_status:   view = view[view["Status"].isin(f_status)]
             if "Priority" in view.columns and f_priority: view = view[view["Priority"].isin(f_priority)]
             if "Priority" in view.columns:
-                view = view.assign(_s=view["Priority"].map({"Urgent":0,"High":1,"Medium":2,"Low":3}).fillna(9)).sort_values("_s").drop(columns=["_s"])
+                view = view.assign(_s=view["Priority"].map({"Urgent":0,"High":1,"Medium":2,"Low":3}).fillna(9)).sort_values(["_s","Received"], ascending=[True,False]).drop(columns=["_s"])
 
             edit_df = add_delete_col(view[[c for c in ["index","Subject","From","Received","Priority","Status","Action"] if c in view.columns]])
             edited = st.data_editor(edit_df, column_config={
@@ -651,7 +654,8 @@ with tab_scripts:
             all_st   = ["All"] + sorted(df["Status"].dropna().unique().tolist()) if "Status" in df.columns else ["All"]
             f_status = sc2.selectbox("Status", all_st, key="sc_status_filter")
 
-            view = df.copy().reset_index(drop=False).iloc[::-1]
+            view = df.copy().reset_index(drop=False)
+            if "Created" in view.columns: view = view.sort_values("Created", ascending=False)
             if search: view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
             if f_status != "All" and "Status" in view.columns: view = view[view["Status"] == f_status]
 
@@ -727,7 +731,8 @@ with tab_ref:
             search  = sc1.text_input("🔍 Search", key="r_search")
             all_cats = ["All"] + sorted(df["Category"].dropna().unique().tolist()) if "Category" in df.columns else ["All"]
             f_cat   = sc2.selectbox("Category", all_cats, key="r_cat_filter")
-            view = df.copy().reset_index(drop=False).iloc[::-1]
+            view = df.copy().reset_index(drop=False)
+            if "Created" in view.columns: view = view.sort_values("Created", ascending=False)
             if search: view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
             if f_cat != "All" and "Category" in view.columns: view = view[view["Category"] == f_cat]
 
