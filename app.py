@@ -355,6 +355,19 @@ with tab_actions:
                         if row.get("Notes"): st.markdown(row["Notes"])
                         if row.get("ImageURL"):
                             st.image(resolve_image_url(row["ImageURL"]))
+                        st.markdown("---")
+                        orig_idx = int(row["index"])
+                        e_task  = st.text_input("Task",       value=row.get("Task",""),    key=f"ac_et_{orig_idx}")
+                        e_owner = st.text_input("Owner",      value=row.get("Owner",""),   key=f"ac_eo_{orig_idx}")
+                        e_notes = st.text_area("Notes",       value=row.get("Notes",""),   key=f"ac_en_{orig_idx}", height=80)
+                        e_img   = st.text_input("Image URL",  value=row.get("ImageURL",""),key=f"ac_ei_{orig_idx}", placeholder="Paste Imgur or Google Drive link")
+                        if st.button("💾 Save changes", key=f"ac_sv_{orig_idx}", use_container_width=True):
+                            for col, val in [("Task",e_task),("Owner",e_owner),("Notes",e_notes),("ImageURL",e_img)]:
+                                if val != row.get(col,""):
+                                    dm().update_cell("ActionItems", orig_idx, col, val)
+                            invalidate("ActionItems")
+                            st.toast("Saved!")
+                            st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
