@@ -136,14 +136,7 @@ class SheetsManager:
         if not hasattr(self, '_ws_map'):
             self._refresh_ws_cache()
         if name not in self._ws_map:
-            # Try to create it
-            try:
-                cols = SCHEMAS.get(name, [])
-                ws = self._sh.add_worksheet(title=name, rows=1000, cols=max(len(cols), 10))
-                ws.append_row(cols)
-                self._ws_map[name] = ws
-            except Exception:
-                self._refresh_ws_cache()  # maybe it was created elsewhere
+            self._refresh_ws_cache()
         return self._ws_map[name]
 
     def ensure_worksheets(self):
@@ -160,8 +153,11 @@ class SheetsManager:
 
     def append_row(self, sheet: str, row_dict: dict):
         ws = self._ws(sheet)
-        cols = SCHEMAS.get(sheet, list(row_dict.keys()))
-        row = [str(row_dict.get(c, "")) for c in cols]
+        # Always read the actual headers from the sheet, never assume
+        actual_headers = ws.row_values(1)
+        if not actual_headers:
+            actual_headers = list(row_dict.keys())
+        row = [str(row_dict.get(c, "")) for c in actual_headers]
         ws.append_row(row, value_input_option="USER_ENTERED")
 
     def update_cell(self, sheet: str, df_index: int, column: str, value: Any):
