@@ -7,13 +7,12 @@ LOCAL_FILE = "data.json"
 
 SCHEMAS: dict[str, list[str]] = {
     "Issues":      ["Title", "Description", "Priority", "Owner", "Due", "Status", "Created"],
-    "Agenda":      ["Person", "Topic", "Category", "AddedBy", "Discussed", "Created"],
     "ActionItems": ["Task", "Owner", "Due", "Source", "Status", "Notes", "Created"],
-    "Meetings":     ["Title", "Date", "Attendees", "Notes", "Questions", "Created"],
-    "Scripts":      ["Title", "Language", "Script", "Notes", "Issues", "Questions", "Status", "Created"],
-    "Calendar":    ["Title", "Date", "Time", "Type", "With", "Notes"],
-    "Emails":      ["Subject", "From", "Received", "Priority", "Action", "Status", "Notes", "Created"],
+    "Meetings":    ["Title", "Date", "Attendees", "Notes", "Questions", "Created"],
+    "Scripts":     ["Name", "Schedule", "Description", "Notebooks", "OutputTables", "Owner", "Status", "LastRun", "Notes", "Created"],
+    "Procedures":  ["Title", "Category", "Steps", "Notes", "Tags", "Created"],
     "Reference":   ["Title", "Category", "Content", "Explanation", "Tags", "Created"],
+    "Agenda":      ["Person", "Topic", "Category", "AddedBy", "Discussed", "Created"],
     "Notes":       ["Title", "Tags", "LinkedTo", "Body", "Created"],
     "Config":      ["Key", "Value"],
 }
