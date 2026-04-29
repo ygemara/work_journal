@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, date
 from data_manager import SheetsManager
 
-st.set_page_config(page_title="Manager Dashboard", page_icon="📋", layout="wide")
+st.set_page_config(page_title="Dashboard", page_icon="📋", layout="wide")
 
 st.markdown("""
 <style>
@@ -25,7 +25,7 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("## 🔒 Manager Dashboard")
+    st.markdown("## 🔒 Dashboard")
     with st.form("login"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
@@ -101,9 +101,24 @@ def sorted_by_created(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def resolve_image_url(url: str) -> str:
+    """Convert share URLs to direct image URLs."""
+    import re
+    url = url.strip()
+    # Google Drive
+    m = re.search(r"/file/d/([^/]+)", url)
+    if m:
+        return f"https://drive.google.com/uc?id={m.group(1)}"
+    # Imgur page link -> direct image
+    m = re.match(r"https?://imgur\.com/([a-zA-Z0-9]+)$", url)
+    if m:
+        return f"https://i.imgur.com/{m.group(1)}.png"
+    return url
+
+
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 📋 Manager Dashboard")
+    st.markdown("## 📋 Dashboard")
     st.success("☁️ Google Sheets connected")
     st.markdown("---")
     st.markdown("### 👥 Your Team")
@@ -137,7 +152,7 @@ with st.sidebar:
 
 
 # ── header ────────────────────────────────────────────────────────────────────
-st.markdown("# 📋 Manager Dashboard")
+st.markdown("# 📋 Dashboard")
 c0, c_status = st.columns([4, 1])
 c0.caption(date.today().strftime("%A, %B %d, %Y"))
 c_status.success("☁️ Connected")
@@ -339,12 +354,7 @@ with tab_actions:
                     with st.expander(f"{row.get('Task','')}"):
                         if row.get("Notes"): st.markdown(row["Notes"])
                         if row.get("ImageURL"):
-                            url = row["ImageURL"].strip()
-                            if "drive.google.com/file" in url:
-                                import re
-                                m = re.search(r"/file/d/([^/]+)", url)
-                                if m: url = f"https://drive.google.com/uc?id={m.group(1)}"
-                            st.image(url)
+                            st.image(resolve_image_url(row["ImageURL"]))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -637,12 +647,7 @@ with tab_procedures:
                     if row.get("Steps"):
                         st.markdown(row["Steps"])
                     if row.get("ImageURL"):
-                        url = row["ImageURL"].strip()
-                        if "drive.google.com/file" in url:
-                            import re
-                            m = re.search(r"/file/d/([^/]+)", url)
-                            if m: url = f"https://drive.google.com/uc?id={m.group(1)}"
-                        st.image(url, use_container_width=True)
+                        st.image(resolve_image_url(row["ImageURL"]), use_container_width=True)
 
                     st.markdown("---")
                     e_title = st.text_input("Title",    value=row.get("Title",""),    key=f"pr_et_{orig_idx}")
