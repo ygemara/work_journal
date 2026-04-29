@@ -147,15 +147,8 @@ class SheetsManager:
         return self._ws_map[name]
 
     def ensure_worksheets(self):
+        """Just load the worksheet cache — never rewrite headers."""
         self._refresh_ws_cache()
-        for name, cols in SCHEMAS.items():
-            if name not in self._ws_map:
-                try:
-                    ws = self._sh.add_worksheet(title=name, rows=1000, cols=max(len(cols), 10))
-                    ws.append_row(cols)
-                    self._ws_map[name] = ws
-                except Exception:
-                    pass
 
     def get_data(self, sheet: str) -> pd.DataFrame:
         try:
