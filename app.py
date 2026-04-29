@@ -20,7 +20,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # ── password ──────────────────────────────────────────────────────────────────
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -66,7 +65,6 @@ def dm() -> SheetsManager:
 
 
 def get_data(sheet: str) -> pd.DataFrame:
-    """Read from session state cache. Fetches from Sheets only if not cached."""
     key = f"_data_{sheet}"
     if key not in st.session_state:
         st.session_state[key] = get_manager().get_data(sheet)
@@ -74,14 +72,12 @@ def get_data(sheet: str) -> pd.DataFrame:
 
 
 def invalidate(sheet: str):
-    """Clear just one sheet from the cache so next get_data re-fetches it."""
     key = f"_data_{sheet}"
     if key in st.session_state:
         del st.session_state[key]
 
 
 def save(fn, *args, sheet: str = None, success_msg="Saved!", **kwargs):
-    """Write, invalidate just the affected sheet, rerun."""
     try:
         fn(*args, **kwargs)
         if sheet:
@@ -93,6 +89,18 @@ def save(fn, *args, sheet: str = None, success_msg="Saved!", **kwargs):
         st.error(f"❌ {e}")
 
 
+def add_delete_col(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df.insert(0, "Delete", False)
+    return df
+
+
+def sorted_by_created(df: pd.DataFrame) -> pd.DataFrame:
+    if "Created" in df.columns:
+        return df.sort_values("Created", ascending=False)
+    return df
+
+
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 📋 Manager Dashboard")
@@ -102,7 +110,9 @@ with st.sidebar:
 
     new_name = st.text_input("Add person", placeholder="Jane Smith", label_visibility="collapsed")
     if st.button("➕ Add", use_container_width=True) and new_name.strip():
-        save(dm().add_direct_report, new_name.strip(), success_msg=None)
+        save(dm().add_direct_report, new_name.strip(), sheet=None, success_msg=None)
+        st.session_state.direct_reports = dm().get_direct_reports()
+        st.rerun()
 
     reports = st.session_state.direct_reports
     if reports:
@@ -110,7 +120,9 @@ with st.sidebar:
             st.markdown(f"• {r}")
         remove = st.selectbox("Remove", ["—"] + reports, label_visibility="collapsed")
         if st.button("🗑 Remove", use_container_width=True) and remove != "—":
-            save(dm().remove_direct_report, remove, success_msg=None)
+            save(dm().remove_direct_report, remove, sheet=None, success_msg=None)
+            st.session_state.direct_reports = dm().get_direct_reports()
+            st.rerun()
     else:
         st.caption("No team members yet.")
 
@@ -133,43 +145,29 @@ c_status.success("☁️ Connected")
 try:
     _i = get_data("Issues")
     _a = get_data("ActionItems")
-    _e = get_data("Emails")
     open_issues     = int((_i["Status"] == "Open").sum())           if not _i.empty and "Status" in _i.columns else 0
     high_pri        = int(((_i["Status"] == "Open") & (_i["Priority"] == "High")).sum()) if not _i.empty else 0
     pending_actions = int((_a["Status"] == "Pending").sum())        if not _a.empty and "Status" in _a.columns else 0
-    urgent_emails   = int(((_e["Status"] == "Pending") & (_e["Priority"] == "Urgent")).sum()) if not _e.empty else 0
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2, k3 = st.columns(3)
     k1.metric("🔴 Open Issues",    open_issues)
     k2.metric("⚡ High Priority",   high_pri)
     k3.metric("✅ Pending Actions", pending_actions)
-    k4.metric("📧 Urgent Emails",   urgent_emails)
 except Exception as e:
     st.warning(f"Could not load summary: {e}")
 
 st.markdown("---")
 
-tabs = st.tabs(["🔴 Issues", "💬 1:1 Agenda", "✅ Action Items", "📅 Calendar", "📧 Emails", "🗒 Meetings", "🔬 Scripts", "📚 Reference", "📝 Notes"])
-tab_issues, tab_agenda, tab_actions, tab_calendar, tab_emails, tab_meetings, tab_scripts, tab_ref, tab_notes = tabs
-
-
-# ── helpers ───────────────────────────────────────────────────────────────────
-def delete_selected(sheet: str, df: pd.DataFrame, edited: pd.DataFrame):
-    """Delete rows where the Delete checkbox is ticked."""
-    to_delete = edited[edited["Delete"] == True].index.tolist()
-    if not to_delete:
-        st.info("Tick the Delete box on a row then click Delete Selected.")
-        return
-    for idx in sorted(to_delete, reverse=True):
-        dm().delete_row(sheet, idx)
-    invalidate(sheet)
-    st.toast(f"Deleted {len(to_delete)} row(s).")
-    st.rerun()
-
-
-def add_delete_col(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df.insert(0, "Delete", False)
-    return df
+tabs = st.tabs([
+    "🔴 Issues",
+    "✅ Action Items",
+    "🗒 Meetings",
+    "🔬 Scripts",
+    "📋 Procedures",
+    "📚 Reference",
+    "💬 1:1 Agenda",
+    "📝 Notes",
+])
+tab_issues, tab_actions, tab_meetings, tab_scripts, tab_procedures, tab_ref, tab_agenda, tab_notes = tabs
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -193,7 +191,7 @@ with tab_issues:
                 else:
                     save(dm().append_row, "Issues", {
                         "Title": i_title.strip(), "Description": i_desc.strip(),
-                        "Priority": i_priority, "Owner": i_owner,
+                        "Priority": i_priority, "Owner": i_owner.strip(),
                         "Due": str(i_due) if i_due else "", "Status": "Open",
                         "Created": str(date.today()),
                     }, sheet="Issues", success_msg="Issue logged!")
@@ -206,32 +204,28 @@ with tab_issues:
             fc1, fc2 = st.columns(2)
             f_status   = fc1.multiselect("Status",   ["Open","In Progress","Resolved"], default=["Open","In Progress"])
             f_priority = fc2.multiselect("Priority", ["High","Medium","Low"],           default=["High","Medium","Low"])
-            view = df.copy().reset_index(drop=False)  # keep original index
+            view = df.copy().reset_index(drop=False)
             if "Status"   in view.columns and f_status:   view = view[view["Status"].isin(f_status)]
             if "Priority" in view.columns and f_priority: view = view[view["Priority"].isin(f_priority)]
             if "Priority" in view.columns:
-                view = view.assign(_s=view["Priority"].map({"High":0,"Medium":1,"Low":2}).fillna(9)).sort_values(["_s","Created"], ascending=[True,False]).drop(columns=["_s"])
+                view = view.assign(_s=view["Priority"].map({"High":0,"Medium":1,"Low":2}).fillna(9))
+                view = view.sort_values(["_s","Created"], ascending=[True,False]).drop(columns=["_s"])
 
-            edit_df = add_delete_col(view[[c for c in ["index","Title","Priority","Owner","Created","Status","Description"] if c in view.columns]])
-            edited = st.data_editor(
-                edit_df,
-                column_config={
-                    "Delete":   st.column_config.CheckboxColumn("🗑", width="small"),
-                    "index":    st.column_config.Column("Row", disabled=True, width="small"),
-                    "Status":   st.column_config.SelectboxColumn("Status", options=["Open","In Progress","Resolved"]),
-                    "Priority": st.column_config.SelectboxColumn("Priority", options=["High","Medium","Low"]),
-                },
-                use_container_width=True, hide_index=True, key="issues_editor"
-            )
+            edit_df = add_delete_col(view[[c for c in ["index","Title","Priority","Owner","Created","Status"] if c in view.columns]])
+            edited = st.data_editor(edit_df, column_config={
+                "Delete":   st.column_config.CheckboxColumn("🗑", width="small"),
+                "index":    st.column_config.Column("Row", disabled=True, width="small"),
+                "Status":   st.column_config.SelectboxColumn("Status",   options=["Open","In Progress","Resolved"]),
+                "Priority": st.column_config.SelectboxColumn("Priority", options=["High","Medium","Low"]),
+            }, use_container_width=True, hide_index=True, key="issues_editor")
 
             bc1, bc2 = st.columns(2)
             if bc1.button("💾 Save changes", key="issues_save", use_container_width=True):
                 for _, row in edited.iterrows():
                     orig_idx = int(row["index"])
-                    orig_row = df.loc[orig_idx]
-                    if row.get("Status") != orig_row.get("Status"):
+                    if row.get("Status") != df.loc[orig_idx].get("Status"):
                         dm().update_cell("Issues", orig_idx, "Status", row["Status"])
-                    if row.get("Priority") != orig_row.get("Priority"):
+                    if row.get("Priority") != df.loc[orig_idx].get("Priority"):
                         dm().update_cell("Issues", orig_idx, "Priority", row["Priority"])
                 invalidate("Issues")
                 st.toast("Saved!")
@@ -239,7 +233,7 @@ with tab_issues:
             if bc2.button("🗑 Delete selected", key="issues_del", use_container_width=True):
                 to_del = edited[edited["Delete"] == True]["index"].tolist()
                 if not to_del:
-                    st.info("Tick Delete on a row first.")
+                    st.info("Tick rows first.")
                 else:
                     for idx in sorted(to_del, reverse=True):
                         dm().delete_row("Issues", int(idx))
@@ -247,82 +241,13 @@ with tab_issues:
                     st.toast(f"Deleted {len(to_del)} row(s).")
                     st.rerun()
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 1:1 AGENDA
-# ═══════════════════════════════════════════════════════════════════════════════
-with tab_agenda:
-    st.markdown('<div class="section-header">1:1 Agenda Builder</div>', unsafe_allow_html=True)
-    if not st.session_state.direct_reports:
-        st.info("👈 Add team members in the sidebar first.")
-    else:
-        selected = st.selectbox("Who are you meeting with?", st.session_state.direct_reports, key="ag_person")
-        col_add, col_view = st.columns([1, 2], gap="large")
-
-        with col_add:
-            with st.container(border=True):
-                st.markdown(f"**➕ Add topic for {selected}**")
-                a_topic    = st.text_area("Topic", key="a_topic", height=80)
-                a_type     = st.selectbox("Category", ["Update","Feedback","Blocker","Development","Recognition","Other"], key="a_type")
-                a_added_by = st.text_input("Added by", key="a_by", value="Me")
-                if st.button("Add to Agenda", type="primary", use_container_width=True):
-                    if not a_topic.strip():
-                        st.warning("Topic required.")
-                    else:
-                        save(dm().append_row, "Agenda", {
-                            "Person": selected, "Topic": a_topic.strip(),
-                            "Category": a_type, "AddedBy": a_added_by,
-                            "Discussed": "No", "Created": str(date.today()),
-                        }, sheet="Agenda", success_msg="Added!")
-
-        with col_view:
-            df = get_data("Agenda")
-            person_df = df[df["Person"] == selected].reset_index(drop=False) if not df.empty and "Person" in df.columns else pd.DataFrame()
-            show_done = st.toggle("Show discussed", False, key="ag_show_done")
-
-            pending_raw = person_df[person_df["Discussed"] == "No"]  if not person_df.empty and "Discussed" in person_df.columns else person_df
-            pending = pending_raw.sort_values("Created", ascending=False) if "Created" in pending_raw.columns else pending_raw
-            done    = person_df[person_df["Discussed"] == "Yes"] if not person_df.empty and "Discussed" in person_df.columns else pd.DataFrame()
-
-            if person_df.empty:
-                st.info(f"No topics for {selected} yet.")
-            else:
-                st.markdown(f"**{len(pending)} to discuss · {len(done)} done**")
-                if not pending.empty:
-                    edit_df = add_delete_col(pending[[c for c in ["index","Topic","Category","AddedBy","Created"] if c in pending.columns]])
-                    edited = st.data_editor(
-                        edit_df,
-                        column_config={
-                            "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
-                            "index":  st.column_config.Column("Row", disabled=True, width="small"),
-                        },
-                        use_container_width=True, hide_index=True, key="agenda_editor"
-                    )
-                    bc1, bc2, bc3 = st.columns(3)
-                    if bc1.button("✓ Mark Done", key="ag_done", use_container_width=True):
-                        checked = edited[edited["Delete"] == True]["index"].tolist()
-                        if not checked:
-                            st.info("Tick rows to mark as done.")
-                        else:
-                            for idx in checked:
-                                dm().update_cell("Agenda", int(idx), "Discussed", "Yes")
-                            invalidate("Agenda")
-                            st.toast("Marked done!")
-                            st.rerun()
-                    if bc2.button("🗑 Delete", key="ag_del", use_container_width=True):
-                        to_del = edited[edited["Delete"] == True]["index"].tolist()
-                        if not to_del:
-                            st.info("Tick rows first.")
-                        else:
-                            for idx in sorted(to_del, reverse=True):
-                                dm().delete_row("Agenda", int(idx))
-                            invalidate("Agenda")
-                            st.rerun()
-
-                if show_done and not done.empty:
-                    st.markdown("---")
-                    st.markdown("**Previously discussed:**")
-                    st.dataframe(done[[c for c in ["Topic","Category","Created"] if c in done.columns]], use_container_width=True, hide_index=True)
+            # Detail expanders for description
+            has_desc = view[view["Description"].str.strip() != ""] if "Description" in view.columns else pd.DataFrame()
+            if not has_desc.empty:
+                st.markdown("---")
+                for _, row in has_desc.iterrows():
+                    with st.expander(f"{row.get('Title','')}"):
+                        st.markdown(row.get("Description",""))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -336,7 +261,7 @@ with tab_actions:
         with st.container(border=True):
             st.markdown("**➕ New action item**")
             ac_task  = st.text_input("Task", key="ac_task")
-            ac_owner = st.text_input("Owner", key="ac_owner", placeholder="e.g. Me, Jane Smith")
+            ac_owner = st.text_input("Owner", key="ac_owner", placeholder="e.g. Me, Jane")
             ac_due   = st.date_input("Due date", key="ac_due")
             ac_src   = st.selectbox("From", ["1:1","Team Meeting","Issue","Email","Other"], key="ac_src")
             ac_notes = st.text_area("Notes / context", key="ac_notes", height=80,
@@ -346,7 +271,7 @@ with tab_actions:
                     st.warning("Task required.")
                 else:
                     save(dm().append_row, "ActionItems", {
-                        "Task": ac_task.strip(), "Owner": ac_owner,
+                        "Task": ac_task.strip(), "Owner": ac_owner.strip(),
                         "Due": str(ac_due), "Source": ac_src,
                         "Status": "Pending", "Notes": ac_notes.strip(),
                         "Created": str(date.today()),
@@ -357,34 +282,29 @@ with tab_actions:
         if df.empty:
             st.info("No action items yet.")
         else:
-            f_owner = st.selectbox("Filter by", ["Everyone","Me"] + st.session_state.direct_reports, key="ac_filt")
+            f_owner = st.selectbox("Filter by owner", ["Everyone"] + ["Me"] + st.session_state.direct_reports, key="ac_filt")
             today_str = str(date.today())
             view = df.copy().reset_index(drop=False)
             if "Status" in view.columns:
                 view = view[view["Status"] != "Done"]
-            if "Created" in view.columns:
-                view = view.sort_values("Created", ascending=False)
             if f_owner != "Everyone" and "Owner" in view.columns:
                 view = view[view["Owner"] == f_owner]
+            if "Created" in view.columns:
+                view = view.sort_values("Created", ascending=False)
+            if "Due" in view.columns:
+                view["⚠️"] = view.apply(lambda r: "🚨" if str(r.get("Due","")) < today_str and r.get("Status") == "Pending" else "", axis=1)
 
             if view.empty:
                 st.success("🎉 All clear!")
             else:
-                if "Due" in view.columns:
-                    view = view.copy()
-                    view["⚠️"] = view.apply(lambda r: "🚨" if str(r.get("Due","")) < today_str and r.get("Status") == "Pending" else "", axis=1)
-                edit_cols = [c for c in ["Delete","⚠️","index","Task","Owner","Due","Status","Notes","Source"] if c in ["Delete","⚠️","index"] or c in view.columns]
-                edit_df = add_delete_col(view[[c for c in ["index","⚠️","Task","Owner","Created","Due","Status","Notes"] if c in view.columns or c in ["index","⚠️"]]])
-                edited = st.data_editor(
-                    edit_df,
-                    column_config={
-                        "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
-                        "index":  st.column_config.Column("Row", disabled=True, width="small"),
-                        "⚠️":    st.column_config.Column("⚠️", disabled=True, width="small"),
-                        "Status": st.column_config.SelectboxColumn("Status", options=["Pending","In Progress","Done"]),
-                    },
-                    use_container_width=True, hide_index=True, key="actions_editor"
-                )
+                edit_df = add_delete_col(view[[c for c in ["index","⚠️","Task","Owner","Created","Due","Status"] if c in view.columns or c == "⚠️"]])
+                edited = st.data_editor(edit_df, column_config={
+                    "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
+                    "index":  st.column_config.Column("Row", disabled=True, width="small"),
+                    "⚠️":    st.column_config.Column("⚠️", disabled=True, width="small"),
+                    "Status": st.column_config.SelectboxColumn("Status", options=["Pending","In Progress","Done"]),
+                }, use_container_width=True, hide_index=True, key="actions_editor")
+
                 bc1, bc2 = st.columns(2)
                 if bc1.button("💾 Save changes", key="ac_save", use_container_width=True):
                     for _, row in edited.iterrows():
@@ -401,6 +321,7 @@ with tab_actions:
                     else:
                         for idx in sorted(to_del, reverse=True):
                             dm().delete_row("ActionItems", int(idx))
+                        invalidate("ActionItems")
                         st.rerun()
 
             done_df = df[df["Status"] == "Done"].reset_index(drop=False) if "Status" in df.columns else pd.DataFrame()
@@ -408,129 +329,13 @@ with tab_actions:
                 with st.expander(f"✅ {len(done_df)} completed"):
                     st.dataframe(done_df[[c for c in ["Task","Owner","Due"] if c in done_df.columns]], use_container_width=True, hide_index=True)
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# CALENDAR
-# ═══════════════════════════════════════════════════════════════════════════════
-with tab_calendar:
-    st.markdown('<div class="section-header">Calendar & Upcoming Events</div>', unsafe_allow_html=True)
-    col_f, col_v = st.columns([1, 2], gap="large")
-
-    with col_f:
-        with st.container(border=True):
-            st.markdown("**➕ Add event**")
-            ev_title = st.text_input("Event name", key="ev_title")
-            ev_date  = st.date_input("Date", key="ev_date")
-            ev_time  = st.time_input("Time (optional)", value=None, key="ev_time", step=900)
-            ev_type  = st.selectbox("Type", ["1:1","Team Meeting","Deadline","Performance Review","Planning","Other"], key="ev_type")
-            ev_with  = st.text_input("With (optional)", key="ev_with", placeholder="e.g. John, Sarah")
-            ev_notes = st.text_area("Notes", key="ev_notes", height=60)
-            if st.button("Add Event", type="primary", use_container_width=True):
-                if not ev_title.strip():
-                    st.warning("Event needs a name.")
-                else:
-                    save(dm().append_row, "Calendar", {
-                        "Title": ev_title.strip(), "Date": str(ev_date),
-                        "Time": str(ev_time)[:5] if ev_time else "",
-                        "Type": ev_type, "With": ev_with.strip(),
-                        "Notes": ev_notes.strip(),
-                    }, sheet="Calendar", success_msg="Event added!")
-
-    with col_v:
-        df = get_data("Calendar")
-        today_str = str(date.today())
-        if df.empty:
-            st.info("No events yet.")
-        else:
-            view = df.copy().reset_index(drop=False)
-            if "Date" in view.columns:
-                upcoming = view[view["Date"] >= today_str].sort_values("Date")
-                past     = view[view["Date"] < today_str].sort_values("Date", ascending=False)
-            else:
-                upcoming, past = view, pd.DataFrame()
-
-            if not upcoming.empty:
-                st.markdown(f"**{len(upcoming)} upcoming**")
-                edit_df = add_delete_col(upcoming[[c for c in ["index","Date","Time","Title","Type","With","Notes"] if c in upcoming.columns]])
-                edited = st.data_editor(edit_df, column_config={
-                    "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
-                    "index":  st.column_config.Column("Row", disabled=True, width="small"),
-                }, use_container_width=True, hide_index=True, key="cal_editor")
-                if st.button("🗑 Delete selected", key="cal_del", use_container_width=True):
-                    to_del = edited[edited["Delete"] == True]["index"].tolist()
-                    for idx in sorted(to_del, reverse=True):
-                        dm().delete_row("Calendar", int(idx))
-                    st.rerun()
-
-            if not past.empty:
-                with st.expander(f"🗓 {len(past)} past events"):
-                    st.dataframe(past[[c for c in ["Date","Title","Type"] if c in past.columns]], use_container_width=True, hide_index=True)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# EMAILS
-# ═══════════════════════════════════════════════════════════════════════════════
-with tab_emails:
-    st.markdown('<div class="section-header">Important Emails</div>', unsafe_allow_html=True)
-    col_f, col_v = st.columns([1, 2], gap="large")
-
-    with col_f:
-        with st.container(border=True):
-            st.markdown("**📧 Log an email**")
-            em_subject  = st.text_input("Subject", key="em_subject")
-            em_from     = st.text_input("From", key="em_from")
-            em_received = st.date_input("Received", key="em_received")
-            em_priority = st.selectbox("Priority", ["Urgent","High","Medium","Low"], key="em_priority")
-            em_action   = st.text_area("Action needed", key="em_action", height=80)
-            em_notes    = st.text_area("Notes / summary", key="em_notes", height=80)
-            if st.button("Save Email", type="primary", use_container_width=True):
-                if not em_subject.strip():
-                    st.warning("Subject required.")
-                else:
-                    save(dm().append_row, "Emails", {
-                        "Subject": em_subject.strip(), "From": em_from.strip(),
-                        "Received": str(em_received), "Priority": em_priority,
-                        "Action": em_action.strip(), "Status": "Pending",
-                        "Notes": em_notes.strip(), "Created": str(date.today()),
-                    }, sheet="Emails", success_msg="Saved!")
-
-    with col_v:
-        df = get_data("Emails")
-        if df.empty:
-            st.info("No emails logged yet.")
-        else:
-            fc1, fc2 = st.columns(2)
-            f_status   = fc1.multiselect("Status",   ["Pending","In Progress","Done"], default=["Pending","In Progress"], key="em_fs")
-            f_priority = fc2.multiselect("Priority", ["Urgent","High","Medium","Low"], default=["Urgent","High","Medium","Low"], key="em_fp")
-            view = df.copy().reset_index(drop=False)
-            if "Status"   in view.columns and f_status:   view = view[view["Status"].isin(f_status)]
-            if "Priority" in view.columns and f_priority: view = view[view["Priority"].isin(f_priority)]
-            if "Priority" in view.columns:
-                view = view.assign(_s=view["Priority"].map({"Urgent":0,"High":1,"Medium":2,"Low":3}).fillna(9)).sort_values(["_s","Received"], ascending=[True,False]).drop(columns=["_s"])
-
-            edit_df = add_delete_col(view[[c for c in ["index","Subject","From","Received","Priority","Status","Action"] if c in view.columns]])
-            edited = st.data_editor(edit_df, column_config={
-                "Delete":   st.column_config.CheckboxColumn("🗑", width="small"),
-                "index":    st.column_config.Column("Row", disabled=True, width="small"),
-                "Status":   st.column_config.SelectboxColumn("Status",   options=["Pending","In Progress","Done"]),
-                "Priority": st.column_config.SelectboxColumn("Priority", options=["Urgent","High","Medium","Low"]),
-            }, use_container_width=True, hide_index=True, key="emails_editor")
-
-            bc1, bc2 = st.columns(2)
-            if bc1.button("💾 Save changes", key="em_save", use_container_width=True):
-                for _, row in edited.iterrows():
-                    orig_idx = int(row["index"])
-                    if row.get("Status") != df.loc[orig_idx].get("Status"):
-                        dm().update_cell("Emails", orig_idx, "Status", row["Status"])
-                    if row.get("Priority") != df.loc[orig_idx].get("Priority"):
-                        dm().update_cell("Emails", orig_idx, "Priority", row["Priority"])
-                st.toast("Saved!")
-                st.rerun()
-            if bc2.button("🗑 Delete selected", key="em_del", use_container_width=True):
-                to_del = edited[edited["Delete"] == True]["index"].tolist()
-                for idx in sorted(to_del, reverse=True):
-                    dm().delete_row("Emails", int(idx))
-                st.rerun()
+            # Notes expanders
+            has_notes = view[view.get("Notes", pd.Series([""])).str.strip() != ""] if "Notes" in view.columns else pd.DataFrame()
+            if not has_notes.empty:
+                st.markdown("---")
+                for _, row in has_notes.iterrows():
+                    with st.expander(f"{row.get('Task','')}"):
+                        st.markdown(row.get("Notes",""))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -545,7 +350,7 @@ with tab_meetings:
             st.markdown("**➕ Log a meeting**")
             mt_title     = st.text_input("Meeting title", key="mt_title")
             mt_date      = st.date_input("Date", key="mt_date")
-            mt_attendees_text = st.text_input("Attendees", key="mt_att", placeholder="e.g. Jane, John, Sarah")
+            mt_attendees = st.text_input("Attendees", key="mt_att", placeholder="e.g. Jane, John, Sarah")
             mt_notes     = st.text_area("Notes / summary", key="mt_notes", height=120,
                                         placeholder="What was discussed?")
             mt_questions = st.text_area("Outstanding questions", key="mt_questions", height=80,
@@ -556,7 +361,7 @@ with tab_meetings:
                 else:
                     save(dm().append_row, "Meetings", {
                         "Title": mt_title.strip(), "Date": str(mt_date),
-                        "Attendees": mt_attendees_text.strip(),
+                        "Attendees": mt_attendees.strip(),
                         "Notes": mt_notes.strip(), "Questions": mt_questions.strip(),
                         "Created": str(date.today()),
                     }, sheet="Meetings", success_msg="Meeting saved!")
@@ -566,19 +371,14 @@ with tab_meetings:
         if df.empty:
             st.info("No meetings logged yet.")
         else:
-            sc1, sc2 = st.columns([2, 1])
-            search    = sc1.text_input("🔍 Search", key="mt_search")
-            all_types = ["All"] + sorted(df["Type"].dropna().unique().tolist()) if "Type" in df.columns else ["All"]
-            f_type    = sc2.selectbox("Type", all_types, key="mt_type_filter")
-
+            search = st.text_input("🔍 Search", key="mt_search")
             view = df.copy().reset_index(drop=False)
-            if "Date" in view.columns: view = view.sort_values("Date", ascending=False)
-            if search: view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
-            if f_type != "All" and "Type" in view.columns: view = view[view["Type"] == f_type]
+            if "Date" in view.columns:
+                view = view.sort_values("Date", ascending=False)
+            if search:
+                view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
 
-            # Summary table
-            table_cols = [c for c in ["index","Date","Title","Attendees"] if c in view.columns]
-            edit_df = add_delete_col(view[table_cols])
+            edit_df = add_delete_col(view[[c for c in ["index","Date","Title","Attendees"] if c in view.columns]])
             edited = st.data_editor(edit_df, column_config={
                 "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
                 "index":  st.column_config.Column("Row", disabled=True, width="small"),
@@ -591,25 +391,21 @@ with tab_meetings:
                 else:
                     for idx in sorted(to_del, reverse=True):
                         dm().delete_row("Meetings", int(idx))
+                    invalidate("Meetings")
                     st.rerun()
 
             st.markdown("---")
-            st.markdown("**Click a meeting to view or edit:**")
             for _, row in view.iterrows():
                 orig_idx = int(row["index"])
                 with st.expander(f"**{row.get('Title','')}**  ·  {row.get('Date','')}  ·  {row.get('Attendees','')}"):
-                    if row.get("Attendees"): st.caption(f"👥 {row['Attendees']}")
-
-                    e_title     = st.text_input("Title",                value=row.get("Title",""),     key=f"mt_et_{orig_idx}")
-                    e_date      = st.text_input("Date",                 value=row.get("Date",""),      key=f"mt_ed_{orig_idx}")
-                    e_att       = st.text_input("Attendees",            value=row.get("Attendees",""), key=f"mt_ea_{orig_idx}")
-                    e_summary   = st.text_area("Notes / summary",      value=row.get("Notes",""),     key=f"mt_es_{orig_idx}", height=120)
-                    e_decisions = st.text_area("Outstanding questions", value=row.get("Questions",""), key=f"mt_edc_{orig_idx}", height=80)
-
-                    if st.button("💾 Save changes", key=f"mt_sv_{orig_idx}", use_container_width=True):
-                        for col, val in [("Title", e_title), ("Date", e_date), ("Attendees", e_att),
-                                         ("Notes", e_summary), ("Questions", e_decisions)]:
-                            if val != row.get(col, ""):
+                    e_title = st.text_input("Title",     value=row.get("Title",""),     key=f"mt_et_{orig_idx}")
+                    e_date  = st.text_input("Date",      value=row.get("Date",""),      key=f"mt_ed_{orig_idx}")
+                    e_att   = st.text_input("Attendees", value=row.get("Attendees",""), key=f"mt_ea_{orig_idx}")
+                    e_notes = st.text_area("Notes / summary",      value=row.get("Notes",""),     key=f"mt_en_{orig_idx}", height=120)
+                    e_qs    = st.text_area("Outstanding questions", value=row.get("Questions",""), key=f"mt_eq_{orig_idx}", height=80)
+                    if st.button("💾 Save", key=f"mt_sv_{orig_idx}", use_container_width=True):
+                        for col, val in [("Title",e_title),("Date",e_date),("Attendees",e_att),("Notes",e_notes),("Questions",e_qs)]:
+                            if val != row.get(col,""):
                                 dm().update_cell("Meetings", orig_idx, col, val)
                         invalidate("Meetings")
                         st.toast("Saved!")
@@ -617,37 +413,47 @@ with tab_meetings:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SCRIPTS
+# SCRIPTS — pipeline / schedule tracker
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_scripts:
-    st.markdown('<div class="section-header">Script Review</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">Script & Pipeline Tracker</div>', unsafe_allow_html=True)
+    st.caption("Track scheduled scripts — what they run, what notebooks they call, what tables they write to, and how often.")
+
     col_f, col_v = st.columns([1, 2], gap="large")
 
     with col_f:
         with st.container(border=True):
-            st.markdown("**➕ Add a script**")
-            sc_title  = st.text_input("Title", key="sc_title")
-            sc_lang   = st.selectbox("Language", ["SQL","Python","Shell / Bash","JavaScript","Other"], key="sc_lang")
-            sc_status = st.selectbox("Status", ["Under Review","Has Issues","Approved","Needs Rewrite"], key="sc_status")
-            sc_script = st.text_area("Script", key="sc_script", height=180)
-            sc_notes  = st.text_area("General notes", key="sc_notes", height=80)
-            sc_issues = st.text_area("Issues", key="sc_issues", height=80)
-            sc_qs     = st.text_area("Questions", key="sc_qs", height=80)
+            st.markdown("**➕ Add a script / pipeline**")
+            sc_name    = st.text_input("Script name", key="sc_name", placeholder="e.g. Daily Sales Refresh")
+            sc_sched   = st.selectbox("Schedule", ["Daily","Weekly","Monthly","Ad hoc","Continuous","Other"], key="sc_sched")
+            sc_owner   = st.text_input("Owner", key="sc_owner", placeholder="e.g. Data team")
+            sc_status  = st.selectbox("Status", ["Active","Paused","Broken","Under Review","Deprecated"], key="sc_status")
+            sc_desc    = st.text_area("What does it do?", key="sc_desc", height=80,
+                                      placeholder="Brief description of purpose and logic")
+            sc_nbs     = st.text_area("Notebooks / child scripts", key="sc_nbs", height=80,
+                                      placeholder="List the notebooks or scripts it calls, one per line")
+            sc_tables  = st.text_area("Output tables / destinations", key="sc_tables", height=80,
+                                      placeholder="List tables or systems it writes to, one per line")
+            sc_lastrun = st.text_input("Last run", key="sc_lastrun", placeholder="e.g. 2026-04-27 06:00")
+            sc_notes   = st.text_area("Notes / known issues", key="sc_notes", height=80,
+                                      placeholder="Quirks, known issues, dependencies...")
             if st.button("Save Script", type="primary", use_container_width=True):
-                if not sc_title.strip():
-                    st.warning("Title required.")
+                if not sc_name.strip():
+                    st.warning("Name required.")
                 else:
                     save(dm().append_row, "Scripts", {
-                        "Title": sc_title.strip(), "Language": sc_lang,
-                        "Script": sc_script.strip(), "Notes": sc_notes.strip(),
-                        "Issues": sc_issues.strip(), "Questions": sc_qs.strip(),
-                        "Status": sc_status, "Created": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "Name": sc_name.strip(), "Schedule": sc_sched,
+                        "Description": sc_desc.strip(), "Notebooks": sc_nbs.strip(),
+                        "OutputTables": sc_tables.strip(), "Owner": sc_owner.strip(),
+                        "Status": sc_status, "LastRun": sc_lastrun.strip(),
+                        "Notes": sc_notes.strip(),
+                        "Created": str(date.today()),
                     }, sheet="Scripts", success_msg="Script saved!")
 
     with col_v:
         df = get_data("Scripts")
         if df.empty:
-            st.info("No scripts yet.")
+            st.info("No scripts logged yet.")
         else:
             sc1, sc2 = st.columns([2, 1])
             search   = sc1.text_input("🔍 Search", key="sc_search")
@@ -659,11 +465,15 @@ with tab_scripts:
             if search: view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
             if f_status != "All" and "Status" in view.columns: view = view[view["Status"] == f_status]
 
-            edit_df = add_delete_col(view[[c for c in ["index","Title","Language","Status"] if c in view.columns]])
+            # Status indicator colours
+            status_icon = {"Active":"🟢","Paused":"🟡","Broken":"🔴","Under Review":"🔍","Deprecated":"⚫"}
+
+            # Summary table
+            edit_df = add_delete_col(view[[c for c in ["index","Name","Schedule","Owner","Status","LastRun"] if c in view.columns]])
             edited = st.data_editor(edit_df, column_config={
                 "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
                 "index":  st.column_config.Column("Row", disabled=True, width="small"),
-                "Status": st.column_config.SelectboxColumn("Status", options=["Under Review","Has Issues","Approved","Needs Rewrite"]),
+                "Status": st.column_config.SelectboxColumn("Status", options=["Active","Paused","Broken","Under Review","Deprecated"]),
             }, use_container_width=True, hide_index=True, key="scripts_editor")
 
             bc1, bc2 = st.columns(2)
@@ -672,29 +482,162 @@ with tab_scripts:
                     orig_idx = int(row["index"])
                     if row.get("Status") != df.loc[orig_idx].get("Status"):
                         dm().update_cell("Scripts", orig_idx, "Status", row["Status"])
+                invalidate("Scripts")
                 st.toast("Saved!")
                 st.rerun()
             if bc2.button("🗑 Delete selected", key="sc_del", use_container_width=True):
                 to_del = edited[edited["Delete"] == True]["index"].tolist()
-                for idx in sorted(to_del, reverse=True):
-                    dm().delete_row("Scripts", int(idx))
-                st.rerun()
+                if not to_del:
+                    st.info("Tick rows first.")
+                else:
+                    for idx in sorted(to_del, reverse=True):
+                        dm().delete_row("Scripts", int(idx))
+                    invalidate("Scripts")
+                    st.rerun()
 
             st.markdown("---")
-            status_icon = {"Under Review":"🔍","Has Issues":"🚨","Approved":"✅","Needs Rewrite":"🔄"}
             for _, row in view.iterrows():
+                orig_idx = int(row["index"])
                 icon = status_icon.get(row.get("Status",""), "📄")
-                with st.expander(f"{icon} **{row.get('Title','')}**  ·  `{row.get('Language','')}`"):
+                with st.expander(f"{icon} **{row.get('Name','')}**  ·  {row.get('Schedule','')}  ·  {row.get('Status','')}"):
+
+                    # Two-column layout inside expander
+                    d1, d2 = st.columns(2)
+                    d1.markdown(f"**Owner:** {row.get('Owner','—')}")
+                    d1.markdown(f"**Last run:** {row.get('LastRun','—')}")
+                    d2.markdown(f"**Schedule:** {row.get('Schedule','—')}")
+
+                    if row.get("Description"):
+                        st.markdown("**What it does:**")
+                        st.markdown(row["Description"])
+
+                    nb1, nb2 = st.columns(2)
+                    if row.get("Notebooks"):
+                        nb1.markdown("**📓 Notebooks / child scripts:**")
+                        for nb in row["Notebooks"].split("\n"):
+                            if nb.strip(): nb1.markdown(f"- {nb.strip()}")
+                    if row.get("OutputTables"):
+                        nb2.markdown("**📊 Output tables / destinations:**")
+                        for t in row["OutputTables"].split("\n"):
+                            if t.strip(): nb2.markdown(f"- {t.strip()}")
+
                     if row.get("Notes"):
-                        st.markdown("**Notes:**")
-                        st.markdown(row["Notes"])
-                    if row.get("Script"):
-                        lang_map = {"SQL":"sql","Python":"python","Shell / Bash":"bash","JavaScript":"javascript"}
-                        st.code(row["Script"], language=lang_map.get(row.get("Language",""), "text"))
-                    if row.get("Issues"):
-                        st.error(f"**Issues:** {row['Issues']}")
-                    if row.get("Questions"):
-                        st.warning(f"**Questions:** {row['Questions']}")
+                        st.markdown("**⚠️ Notes / known issues:**")
+                        st.warning(row["Notes"])
+
+                    st.markdown("---")
+                    st.markdown("**Edit:**")
+                    e_name    = st.text_input("Name",       value=row.get("Name",""),        key=f"sc_en_{orig_idx}")
+                    e_sched   = st.selectbox("Schedule",    ["Daily","Weekly","Monthly","Ad hoc","Continuous","Other"],
+                                             index=["Daily","Weekly","Monthly","Ad hoc","Continuous","Other"].index(row.get("Schedule","Ad hoc")) if row.get("Schedule") in ["Daily","Weekly","Monthly","Ad hoc","Continuous","Other"] else 0,
+                                             key=f"sc_esc_{orig_idx}")
+                    e_owner   = st.text_input("Owner",      value=row.get("Owner",""),       key=f"sc_eo_{orig_idx}")
+                    e_lastrun = st.text_input("Last run",   value=row.get("LastRun",""),     key=f"sc_elr_{orig_idx}")
+                    e_desc    = st.text_area("Description", value=row.get("Description",""), key=f"sc_ed_{orig_idx}", height=80)
+                    e_nbs     = st.text_area("Notebooks",   value=row.get("Notebooks",""),   key=f"sc_enb_{orig_idx}", height=80)
+                    e_tables  = st.text_area("Output tables", value=row.get("OutputTables",""), key=f"sc_et_{orig_idx}", height=80)
+                    e_notes   = st.text_area("Notes",       value=row.get("Notes",""),       key=f"sc_eno_{orig_idx}", height=80)
+
+                    if st.button("💾 Save changes", key=f"sc_sv_{orig_idx}", use_container_width=True):
+                        for col, val in [("Name",e_name),("Schedule",e_sched),("Owner",e_owner),
+                                         ("LastRun",e_lastrun),("Description",e_desc),
+                                         ("Notebooks",e_nbs),("OutputTables",e_tables),("Notes",e_notes)]:
+                            if val != row.get(col,""):
+                                dm().update_cell("Scripts", orig_idx, col, val)
+                        invalidate("Scripts")
+                        st.toast("Saved!")
+                        st.rerun()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROCEDURES
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_procedures:
+    st.markdown('<div class="section-header">Procedures & Processes</div>', unsafe_allow_html=True)
+    st.caption("Document how things work — debugging steps, deployment processes, runbooks, how-tos.")
+
+    col_f, col_v = st.columns([1, 2], gap="large")
+
+    with col_f:
+        with st.container(border=True):
+            st.markdown("**➕ Add a procedure**")
+            pr_title = st.text_input("Title", key="pr_title", placeholder="e.g. How to debug Power BI refresh")
+            pr_cat   = st.selectbox("Category", [
+                "Debugging", "Deployment", "Onboarding", "Reporting",
+                "Data Pipeline", "HR Process", "Admin", "Other"
+            ], key="pr_cat")
+            pr_tags  = st.text_input("Tags", key="pr_tags", placeholder="e.g. Power BI, data, reporting")
+            pr_steps = st.text_area("Steps / content", key="pr_steps", height=200,
+                                    placeholder="Write the steps here. Use numbered lists, bullet points, etc.")
+            pr_notes = st.text_area("Notes / context", key="pr_notes", height=80,
+                                    placeholder="When to use this, prerequisites, gotchas...")
+            if st.button("Save Procedure", type="primary", use_container_width=True):
+                if not pr_title.strip():
+                    st.warning("Title required.")
+                else:
+                    save(dm().append_row, "Procedures", {
+                        "Title": pr_title.strip(), "Category": pr_cat,
+                        "Steps": pr_steps.strip(), "Notes": pr_notes.strip(),
+                        "Tags": pr_tags.strip(),
+                        "Created": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    }, sheet="Procedures", success_msg="Saved!")
+
+    with col_v:
+        df = get_data("Procedures")
+        if df.empty:
+            st.info("No procedures yet.\n\nIdeas to add:\n- How to debug a Power BI refresh failure\n- Deployment checklist\n- New hire onboarding steps\n- How to run a monthly report")
+        else:
+            sc1, sc2 = st.columns([2, 1])
+            search   = sc1.text_input("🔍 Search", key="pr_search")
+            all_cats = ["All"] + sorted(df["Category"].dropna().unique().tolist()) if "Category" in df.columns else ["All"]
+            f_cat    = sc2.selectbox("Category", all_cats, key="pr_cat_filter")
+
+            view = df.copy().reset_index(drop=False)
+            if "Created" in view.columns: view = view.sort_values("Created", ascending=False)
+            if search: view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
+            if f_cat != "All" and "Category" in view.columns: view = view[view["Category"] == f_cat]
+
+            # Index table
+            edit_df = add_delete_col(view[[c for c in ["index","Title","Category","Tags"] if c in view.columns]])
+            edited = st.data_editor(edit_df, column_config={
+                "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
+                "index":  st.column_config.Column("Row", disabled=True, width="small"),
+            }, use_container_width=True, hide_index=True, key="proc_editor")
+
+            if st.button("🗑 Delete selected", key="pr_del", use_container_width=True):
+                to_del = edited[edited["Delete"] == True]["index"].tolist()
+                if not to_del:
+                    st.info("Tick rows first.")
+                else:
+                    for idx in sorted(to_del, reverse=True):
+                        dm().delete_row("Procedures", int(idx))
+                    invalidate("Procedures")
+                    st.rerun()
+
+            st.markdown("---")
+            for _, row in view.iterrows():
+                orig_idx = int(row["index"])
+                with st.expander(f"**{row.get('Title','')}**  ·  {row.get('Category','')}"):
+                    if row.get("Tags"): st.caption(f"🏷 {row['Tags']}")
+                    if row.get("Notes"):
+                        st.info(row["Notes"])
+
+                    if row.get("Steps"):
+                        st.markdown(row["Steps"])
+
+                    st.markdown("---")
+                    e_title = st.text_input("Title",    value=row.get("Title",""),    key=f"pr_et_{orig_idx}")
+                    e_steps = st.text_area("Steps",     value=row.get("Steps",""),    key=f"pr_es_{orig_idx}", height=200)
+                    e_notes = st.text_area("Notes",     value=row.get("Notes",""),    key=f"pr_en_{orig_idx}", height=80)
+                    e_tags  = st.text_input("Tags",     value=row.get("Tags",""),     key=f"pr_etg_{orig_idx}")
+
+                    if st.button("💾 Save changes", key=f"pr_sv_{orig_idx}", use_container_width=True):
+                        for col, val in [("Title",e_title),("Steps",e_steps),("Notes",e_notes),("Tags",e_tags)]:
+                            if val != row.get(col,""):
+                                dm().update_cell("Procedures", orig_idx, col, val)
+                        invalidate("Procedures")
+                        st.toast("Saved!")
+                        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -702,14 +645,16 @@ with tab_scripts:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_ref:
     st.markdown('<div class="section-header">Reference Library</div>', unsafe_allow_html=True)
+    st.caption("Store SQL queries, code snippets, templates — with your own explanation.")
+
     col_add, col_view = st.columns([1, 2], gap="large")
 
     with col_add:
         with st.container(border=True):
             st.markdown("**➕ Add entry**")
             r_title = st.text_input("Title", key="r_title")
-            r_cat   = st.selectbox("Category", ["SQL / Query","Python","Shell / Bash","Process / Checklist","Table / Data","Template","Formula","Other"], key="r_cat")
-            r_tags  = st.text_input("Tags (comma-separated)", key="r_tags")
+            r_cat   = st.selectbox("Category", ["SQL / Query","Python","Shell / Bash","DAX / Power BI","Process / Checklist","Template","Formula","Other"], key="r_cat")
+            r_tags  = st.text_input("Tags", key="r_tags")
             r_body  = st.text_area("Content", key="r_body", height=160)
             r_notes = st.text_area("Your notes / explanation", key="r_notes", height=100)
             if st.button("Save", type="primary", use_container_width=True):
@@ -741,11 +686,16 @@ with tab_ref:
                 "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
                 "index":  st.column_config.Column("Row", disabled=True, width="small"),
             }, use_container_width=True, hide_index=True, key="ref_editor")
+
             if st.button("🗑 Delete selected", key="ref_del", use_container_width=True):
                 to_del = edited[edited["Delete"] == True]["index"].tolist()
-                for idx in sorted(to_del, reverse=True):
-                    dm().delete_row("Reference", int(idx))
-                st.rerun()
+                if not to_del:
+                    st.info("Tick rows first.")
+                else:
+                    for idx in sorted(to_del, reverse=True):
+                        dm().delete_row("Reference", int(idx))
+                    invalidate("Reference")
+                    st.rerun()
 
             st.markdown("---")
             for _, row in view.iterrows():
@@ -759,13 +709,86 @@ with tab_ref:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 1:1 AGENDA
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_agenda:
+    st.markdown('<div class="section-header">1:1 Agenda Builder</div>', unsafe_allow_html=True)
+    if not st.session_state.direct_reports:
+        st.info("👈 Add team members in the sidebar first.")
+    else:
+        selected = st.selectbox("Who are you meeting with?", st.session_state.direct_reports, key="ag_person")
+        col_add, col_view = st.columns([1, 2], gap="large")
+
+        with col_add:
+            with st.container(border=True):
+                st.markdown(f"**➕ Add topic for {selected}**")
+                a_topic    = st.text_area("Topic", key="a_topic", height=80)
+                a_type     = st.selectbox("Category", ["Update","Feedback","Blocker","Development","Recognition","Other"], key="a_type")
+                a_added_by = st.text_input("Added by", key="a_by", value="Me")
+                if st.button("Add to Agenda", type="primary", use_container_width=True):
+                    if not a_topic.strip():
+                        st.warning("Topic required.")
+                    else:
+                        save(dm().append_row, "Agenda", {
+                            "Person": selected, "Topic": a_topic.strip(),
+                            "Category": a_type, "AddedBy": a_added_by.strip(),
+                            "Discussed": "No", "Created": str(date.today()),
+                        }, sheet="Agenda", success_msg="Added!")
+
+        with col_view:
+            df = get_data("Agenda")
+            person_df = df[df["Person"] == selected].reset_index(drop=False) if not df.empty and "Person" in df.columns else pd.DataFrame()
+            show_done = st.toggle("Show discussed", False, key="ag_show_done")
+
+            pending_raw = person_df[person_df["Discussed"] == "No"]  if not person_df.empty and "Discussed" in person_df.columns else person_df
+            pending = pending_raw.sort_values("Created", ascending=False) if "Created" in pending_raw.columns else pending_raw
+            done    = person_df[person_df["Discussed"] == "Yes"] if not person_df.empty and "Discussed" in person_df.columns else pd.DataFrame()
+
+            if person_df.empty:
+                st.info(f"No topics for {selected} yet.")
+            else:
+                st.markdown(f"**{len(pending)} to discuss · {len(done)} done**")
+                if not pending.empty:
+                    edit_df = add_delete_col(pending[[c for c in ["index","Topic","Category","AddedBy","Created"] if c in pending.columns]])
+                    edited = st.data_editor(edit_df, column_config={
+                        "Delete": st.column_config.CheckboxColumn("🗑 / ✓", width="small"),
+                        "index":  st.column_config.Column("Row", disabled=True, width="small"),
+                    }, use_container_width=True, hide_index=True, key="agenda_editor")
+
+                    bc1, bc2 = st.columns(2)
+                    if bc1.button("✓ Mark Done", key="ag_done", use_container_width=True):
+                        checked = edited[edited["Delete"] == True]["index"].tolist()
+                        if not checked:
+                            st.info("Tick rows to mark as done.")
+                        else:
+                            for idx in checked:
+                                dm().update_cell("Agenda", int(idx), "Discussed", "Yes")
+                            invalidate("Agenda")
+                            st.toast("Marked done!")
+                            st.rerun()
+                    if bc2.button("🗑 Delete", key="ag_del", use_container_width=True):
+                        to_del = edited[edited["Delete"] == True]["index"].tolist()
+                        if not to_del:
+                            st.info("Tick rows first.")
+                        else:
+                            for idx in sorted(to_del, reverse=True):
+                                dm().delete_row("Agenda", int(idx))
+                            invalidate("Agenda")
+                            st.rerun()
+
+                if show_done and not done.empty:
+                    st.markdown("---")
+                    st.markdown("**Previously discussed:**")
+                    st.dataframe(done[[c for c in ["Topic","Category","Created"] if c in done.columns]], use_container_width=True, hide_index=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # NOTES — scratchpad
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_notes:
     st.markdown('<div class="section-header">Notes</div>', unsafe_allow_html=True)
-    st.caption("A free-form scratchpad. Just type. Saved to your Google Sheet.")
+    st.caption("Free-form scratchpad. Saved to your Google Sheet.")
 
-    # Load current scratchpad content once
     if "scratchpad_loaded" not in st.session_state:
         try:
             st.session_state.scratchpad = dm().get_scratchpad()
@@ -774,15 +797,12 @@ with tab_notes:
         st.session_state.scratchpad_loaded = True
 
     text = st.text_area(
-        "Scratchpad",
-        value=st.session_state.scratchpad,
-        height=600,
-        label_visibility="collapsed",
+        "Scratchpad", value=st.session_state.scratchpad,
+        height=600, label_visibility="collapsed",
         placeholder="Start typing your notes here...",
         key="scratchpad_input",
     )
-
-    c1, c2 = st.columns([1, 4])
+    c1, _ = st.columns([1, 4])
     if c1.button("💾 Save", type="primary", use_container_width=True):
         try:
             dm().set_scratchpad(text)
