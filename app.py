@@ -266,6 +266,8 @@ with tab_actions:
             ac_src   = st.selectbox("From", ["1:1","Team Meeting","Issue","Email","Other"], key="ac_src")
             ac_notes = st.text_area("Notes / context", key="ac_notes", height=80,
                                     placeholder="What exactly needs to be done?")
+            ac_img = st.text_input("Image URL (optional)", key="ac_img",
+                                   placeholder="Paste Imgur or Google Drive link")
             if st.button("Add Action", type="primary", use_container_width=True):
                 if not ac_task.strip():
                     st.warning("Task required.")
@@ -274,7 +276,7 @@ with tab_actions:
                         "Task": ac_task.strip(), "Owner": ac_owner.strip(),
                         "Due": str(ac_due), "Source": ac_src,
                         "Status": "Pending", "Notes": ac_notes.strip(),
-                        "Created": str(date.today()),
+                        "ImageURL": ac_img.strip(), "Created": str(date.today()),
                     }, sheet="ActionItems", success_msg="Added!")
 
     with col_v:
@@ -329,13 +331,20 @@ with tab_actions:
                 with st.expander(f"✅ {len(done_df)} completed"):
                     st.dataframe(done_df[[c for c in ["Task","Owner","Due"] if c in done_df.columns]], use_container_width=True, hide_index=True)
 
-            # Notes expanders
-            has_notes = view[view.get("Notes", pd.Series([""])).str.strip() != ""] if "Notes" in view.columns else pd.DataFrame()
+            # Notes/image expanders
+            has_notes = view[(view["Notes"].str.strip() != "") | (view["ImageURL"].str.strip() != "")] if "Notes" in view.columns and "ImageURL" in view.columns else (view[view["Notes"].str.strip() != ""] if "Notes" in view.columns else pd.DataFrame())
             if not has_notes.empty:
                 st.markdown("---")
                 for _, row in has_notes.iterrows():
                     with st.expander(f"{row.get('Task','')}"):
-                        st.markdown(row.get("Notes",""))
+                        if row.get("Notes"): st.markdown(row["Notes"])
+                        if row.get("ImageURL"):
+                            url = row["ImageURL"].strip()
+                            if "drive.google.com/file" in url:
+                                import re
+                                m = re.search(r"/file/d/([^/]+)", url)
+                                if m: url = f"https://drive.google.com/uc?id={m.group(1)}"
+                            st.image(url)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -571,6 +580,8 @@ with tab_procedures:
                                     placeholder="Write the steps here. Use numbered lists, bullet points, etc.")
             pr_notes = st.text_area("Notes / context", key="pr_notes", height=80,
                                     placeholder="When to use this, prerequisites, gotchas...")
+            pr_img = st.text_input("Image URL (optional)", key="pr_img",
+                                  placeholder="Paste Imgur or Google Drive link")
             if st.button("Save Procedure", type="primary", use_container_width=True):
                 if not pr_title.strip():
                     st.warning("Title required.")
@@ -579,6 +590,7 @@ with tab_procedures:
                         "Title": pr_title.strip(), "Category": pr_cat,
                         "Steps": pr_steps.strip(), "Notes": pr_notes.strip(),
                         "Tags": pr_tags.strip(),
+                        "ImageURL": pr_img.strip(),
                         "Created": datetime.now().strftime("%Y-%m-%d %H:%M"),
                     }, sheet="Procedures", success_msg="Saved!")
 
@@ -624,6 +636,13 @@ with tab_procedures:
 
                     if row.get("Steps"):
                         st.markdown(row["Steps"])
+                    if row.get("ImageURL"):
+                        url = row["ImageURL"].strip()
+                        if "drive.google.com/file" in url:
+                            import re
+                            m = re.search(r"/file/d/([^/]+)", url)
+                            if m: url = f"https://drive.google.com/uc?id={m.group(1)}"
+                        st.image(url, use_container_width=True)
 
                     st.markdown("---")
                     e_title = st.text_input("Title",    value=row.get("Title",""),    key=f"pr_et_{orig_idx}")
@@ -631,8 +650,9 @@ with tab_procedures:
                     e_notes = st.text_area("Notes",     value=row.get("Notes",""),    key=f"pr_en_{orig_idx}", height=80)
                     e_tags  = st.text_input("Tags",     value=row.get("Tags",""),     key=f"pr_etg_{orig_idx}")
 
+                    e_img = st.text_input("Image URL", value=row.get("ImageURL",""), key=f"pr_ei_{orig_idx}")
                     if st.button("💾 Save changes", key=f"pr_sv_{orig_idx}", use_container_width=True):
-                        for col, val in [("Title",e_title),("Steps",e_steps),("Notes",e_notes),("Tags",e_tags)]:
+                        for col, val in [("Title",e_title),("Steps",e_steps),("Notes",e_notes),("Tags",e_tags),("ImageURL",e_img)]:
                             if val != row.get(col,""):
                                 dm().update_cell("Procedures", orig_idx, col, val)
                         invalidate("Procedures")
