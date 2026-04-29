@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, date
 from data_manager import SheetsManager
 
-st.set_page_config(page_title="Dashboard", page_icon="📋", layout="wide")
+st.set_page_config(page_title="Manager Dashboard", page_icon="📋", layout="wide")
 
 st.markdown("""
 <style>
@@ -25,7 +25,7 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("## 🔒 Dashboard")
+    st.markdown("## 🔒 Manager Dashboard")
     with st.form("login"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
@@ -118,7 +118,7 @@ def resolve_image_url(url: str) -> str:
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 📋 Dashboard")
+    st.markdown("## 📋 Manager Dashboard")
     st.success("☁️ Google Sheets connected")
     st.markdown("---")
     st.markdown("### 👥 Your Team")
@@ -152,7 +152,7 @@ with st.sidebar:
 
 
 # ── header ────────────────────────────────────────────────────────────────────
-st.markdown("# 📋 Dashboard")
+st.markdown("# 📋 Manager Dashboard")
 c0, c_status = st.columns([4, 1])
 c0.caption(date.today().strftime("%A, %B %d, %Y"))
 c_status.success("☁️ Connected")
@@ -291,7 +291,7 @@ with tab_actions:
                         "Task": ac_task.strip(), "Owner": ac_owner.strip(),
                         "Due": str(ac_due), "Source": ac_src,
                         "Status": "Pending", "Notes": ac_notes.strip(),
-                        "ImageURL": ac_img.strip(), "Created": str(date.today()),
+                        "Created": str(date.today()), "ImageURL": ac_img.strip(),
                     }, sheet="ActionItems", success_msg="Added!")
 
     with col_v:
@@ -351,7 +351,7 @@ with tab_actions:
             if not has_notes.empty:
                 st.markdown("---")
                 for _, row in has_notes.iterrows():
-                    with st.expander(f"{row.get('Task','')}"):
+                    with st.expander(f"{row.get('Task','')}  ·  {row.get('Created','')}"):
                         if row.get("Notes"): st.markdown(row["Notes"])
                         if row.get("ImageURL"):
                             st.image(resolve_image_url(row["ImageURL"]))
@@ -600,8 +600,8 @@ with tab_procedures:
                         "Title": pr_title.strip(), "Category": pr_cat,
                         "Steps": pr_steps.strip(), "Notes": pr_notes.strip(),
                         "Tags": pr_tags.strip(),
-                        "ImageURL": pr_img.strip(),
                         "Created": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "ImageURL": pr_img.strip(),
                     }, sheet="Procedures", success_msg="Saved!")
 
     with col_v:
