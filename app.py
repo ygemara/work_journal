@@ -261,8 +261,29 @@ with tab_issues:
             if not has_desc.empty:
                 st.markdown("---")
                 for _, row in has_desc.iterrows():
-                    with st.expander(f"{row.get('Title','')}"):
+                    orig_idx = int(row["index"])
+                    with st.expander(f"{row.get('Title','')}  ·  {row.get('Created','')}"):
                         st.markdown(row.get("Description",""))
+                        st.markdown("---")
+                        ib1, ib2 = st.columns(2)
+                        cur_status = row.get("Status","Open")
+                        if cur_status != "Resolved":
+                            if ib1.button("✅ Mark Resolved", key=f"is_res_{orig_idx}", use_container_width=True):
+                                dm().update_cell("Issues", orig_idx, "Status", "Resolved")
+                                invalidate("Issues")
+                                st.toast("Marked as resolved!")
+                                st.rerun()
+                        else:
+                            if ib1.button("↩️ Reopen", key=f"is_reopen_{orig_idx}", use_container_width=True):
+                                dm().update_cell("Issues", orig_idx, "Status", "Open")
+                                invalidate("Issues")
+                                st.toast("Reopened!")
+                                st.rerun()
+                        if ib2.button("🔄 In Progress", key=f"is_prog_{orig_idx}", use_container_width=True):
+                            dm().update_cell("Issues", orig_idx, "Status", "In Progress")
+                            invalidate("Issues")
+                            st.toast("Marked in progress!")
+                            st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -361,13 +382,27 @@ with tab_actions:
                         e_owner = st.text_input("Owner",      value=row.get("Owner",""),   key=f"ac_eo_{orig_idx}")
                         e_notes = st.text_area("Notes",       value=row.get("Notes",""),   key=f"ac_en_{orig_idx}", height=80)
                         e_img   = st.text_input("Image URL",  value=row.get("ImageURL",""),key=f"ac_ei_{orig_idx}", placeholder="Paste Imgur or Google Drive link")
-                        if st.button("💾 Save changes", key=f"ac_sv_{orig_idx}", use_container_width=True):
+                        sb1, sb2 = st.columns(2)
+                        if sb1.button("💾 Save changes", key=f"ac_sv_{orig_idx}", use_container_width=True):
                             for col, val in [("Task",e_task),("Owner",e_owner),("Notes",e_notes),("ImageURL",e_img)]:
                                 if val != row.get(col,""):
                                     dm().update_cell("ActionItems", orig_idx, col, val)
                             invalidate("ActionItems")
                             st.toast("Saved!")
                             st.rerun()
+                        cur_status = row.get("Status","Pending")
+                        if cur_status != "Done":
+                            if sb2.button("✅ Mark Done", key=f"ac_done_{orig_idx}", use_container_width=True):
+                                dm().update_cell("ActionItems", orig_idx, "Status", "Done")
+                                invalidate("ActionItems")
+                                st.toast("Marked as done!")
+                                st.rerun()
+                        else:
+                            if sb2.button("↩️ Reopen", key=f"ac_reopen_{orig_idx}", use_container_width=True):
+                                dm().update_cell("ActionItems", orig_idx, "Status", "Pending")
+                                invalidate("ActionItems")
+                                st.toast("Reopened!")
+                                st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -669,12 +704,18 @@ with tab_procedures:
                     e_tags  = st.text_input("Tags",     value=row.get("Tags",""),     key=f"pr_etg_{orig_idx}")
 
                     e_img = st.text_input("Image URL", value=row.get("ImageURL",""), key=f"pr_ei_{orig_idx}")
-                    if st.button("💾 Save changes", key=f"pr_sv_{orig_idx}", use_container_width=True):
+                    pb1, pb2 = st.columns(2)
+                    if pb1.button("💾 Save changes", key=f"pr_sv_{orig_idx}", use_container_width=True):
                         for col, val in [("Title",e_title),("Steps",e_steps),("Notes",e_notes),("Tags",e_tags),("ImageURL",e_img)]:
                             if val != row.get(col,""):
                                 dm().update_cell("Procedures", orig_idx, col, val)
                         invalidate("Procedures")
                         st.toast("Saved!")
+                        st.rerun()
+                    if pb2.button("🗑 Delete", key=f"pr_del_{orig_idx}", use_container_width=True):
+                        dm().delete_row("Procedures", orig_idx)
+                        invalidate("Procedures")
+                        st.toast("Deleted!")
                         st.rerun()
 
 
