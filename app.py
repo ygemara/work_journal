@@ -597,7 +597,9 @@ with tab_scripts:
 
                     if row.get("Code"):
                         st.markdown("**💻 Code:**")
-                        st.code(row["Code"])
+                        code_text = row["Code"]
+                        lang = "sql" if "%sql" in code_text.lower() or "select " in code_text.lower() else "python" if "import " in code_text or "def " in code_text else "text"
+                        st.code(code_text, language=lang)
 
                     st.markdown("---")
                     st.markdown("**Edit:**")
