@@ -9,7 +9,7 @@ SCHEMAS: dict[str, list[str]] = {
     "Issues":      ["Title", "Description", "Priority", "Owner", "Due", "Status", "Created"],
     "ActionItems": ["Task", "Owner", "Due", "Source", "Status", "Notes", "Created", "ImageURL"],
     "Meetings":    ["Title", "Date", "Attendees", "Notes", "Questions", "Created"],
-    "Scripts":     ["Name", "Schedule", "Description", "Notebooks", "OutputTables", "Owner", "Status", "LastRun", "Notes", "Created"],
+    "Scripts":     ["Name", "Schedule", "Description", "Notebooks", "OutputTables", "Owner", "Status", "LastRun", "Notes", "Code", "Created"],
     "Procedures":  ["Title", "Category", "Steps", "Notes", "Tags", "Created", "ImageURL"],
     "DataDict":    ["OutputTable", "Column", "SourceTable", "SourceColumn", "Script", "Transform", "Notes", "Created"],
     "Reference":   ["Title", "Category", "Content", "Explanation", "Tags", "Created"],
