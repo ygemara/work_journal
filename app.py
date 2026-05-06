@@ -422,6 +422,8 @@ with tab_meetings:
                                         placeholder="What was discussed?")
             mt_questions = st.text_area("Outstanding questions", key="mt_questions", height=80,
                                         placeholder="What's still unresolved?")
+            mt_img = st.text_input("Image URL (optional)", key="mt_img",
+                                  placeholder="Paste Imgur or Google Drive link")
             if st.button("Save Meeting", type="primary", use_container_width=True):
                 if not mt_title.strip():
                     st.warning("Title required.")
@@ -430,7 +432,7 @@ with tab_meetings:
                         "Title": mt_title.strip(), "Date": str(mt_date),
                         "Attendees": mt_attendees.strip(),
                         "Notes": mt_notes.strip(), "Questions": mt_questions.strip(),
-                        "Created": str(date.today()),
+                        "Created": str(date.today()), "ImageURL": mt_img.strip(),
                     }, sheet="Meetings", success_msg="Meeting saved!")
 
     with col_v:
@@ -470,12 +472,21 @@ with tab_meetings:
                     e_att   = st.text_input("Attendees", value=row.get("Attendees",""), key=f"mt_ea_{orig_idx}")
                     e_notes = st.text_area("Notes / summary",      value=row.get("Notes",""),     key=f"mt_en_{orig_idx}", height=120)
                     e_qs    = st.text_area("Outstanding questions", value=row.get("Questions",""), key=f"mt_eq_{orig_idx}", height=80)
-                    if st.button("💾 Save", key=f"mt_sv_{orig_idx}", use_container_width=True):
-                        for col, val in [("Title",e_title),("Date",e_date),("Attendees",e_att),("Notes",e_notes),("Questions",e_qs)]:
+                    e_img = st.text_input("Image URL", value=row.get("ImageURL",""), key=f"mt_ei_{orig_idx}", placeholder="Paste Imgur or Google Drive link")
+                    if row.get("ImageURL"):
+                        st.image(resolve_image_url(row["ImageURL"]), use_container_width=True)
+                    mb1, mb2 = st.columns(2)
+                    if mb1.button("💾 Save", key=f"mt_sv_{orig_idx}", use_container_width=True):
+                        for col, val in [("Title",e_title),("Date",e_date),("Attendees",e_att),("Notes",e_notes),("Questions",e_qs),("ImageURL",e_img)]:
                             if val != row.get(col,""):
                                 dm().update_cell("Meetings", orig_idx, col, val)
                         invalidate("Meetings")
                         st.toast("Saved!")
+                        st.rerun()
+                    if mb2.button("🗑 Delete", key=f"mt_del_{orig_idx}", use_container_width=True):
+                        dm().delete_row("Meetings", orig_idx)
+                        invalidate("Meetings")
+                        st.toast("Deleted!")
                         st.rerun()
 
 
@@ -504,6 +515,7 @@ with tab_scripts:
             sc_lastrun = st.text_input("Last run", key="sc_lastrun", placeholder="e.g. 2026-04-27 06:00")
             sc_notes   = st.text_area("Notes / known issues", key="sc_notes", height=80,
                                       placeholder="Quirks, known issues, dependencies...")
+            sc_lang    = st.selectbox("Code language", ["SQL","Python","Shell / Bash","DAX","Other"], key="sc_lang_sel")
             sc_code    = st.text_area("Code (optional)", key="sc_code", height=160,
                                       placeholder="Paste the main script or key code blocks here...")
             if st.button("Save Script", type="primary", use_container_width=True):
@@ -517,6 +529,7 @@ with tab_scripts:
                         "Status": sc_status, "LastRun": sc_lastrun.strip(),
                         "Notes": sc_notes.strip(),
                         "Code": sc_code.strip(),
+                        "Language": sc_lang,
                         "Created": str(date.today()),
                     }, sheet="Scripts", success_msg="Script saved!")
 
@@ -598,11 +611,12 @@ with tab_scripts:
                     if row.get("Code"):
                         st.markdown("**💻 Code:**")
                         code_text = row["Code"]
-                        lang = "sql" if "%sql" in code_text.lower() or "select " in code_text.lower() else "python" if "import " in code_text or "def " in code_text else "text"
+                        lang_map = {"SQL":"sql","Python":"python","Shell / Bash":"bash","DAX":"text","Other":"text"}
+                        lang = lang_map.get(row.get("Language",""), "sql" if "select " in code_text.lower() else "python" if "import " in code_text else "text")
                         st.code(code_text, language=lang)
 
                     st.markdown("---")
-                    st.markdown("**Edit:**")
+                    st.markdown("### ✏️ Edit this script")
                     e_name    = st.text_input("Name",       value=row.get("Name",""),        key=f"sc_en_{orig_idx}")
                     e_sched   = st.selectbox("Schedule",    ["Daily","Weekly","Monthly","Ad hoc","Continuous","Other"],
                                              index=["Daily","Weekly","Monthly","Ad hoc","Continuous","Other"].index(row.get("Schedule","Ad hoc")) if row.get("Schedule") in ["Daily","Weekly","Monthly","Ad hoc","Continuous","Other"] else 0,
@@ -613,16 +627,27 @@ with tab_scripts:
                     e_nbs     = st.text_area("Notebooks",   value=row.get("Notebooks",""),   key=f"sc_enb_{orig_idx}", height=80)
                     e_tables  = st.text_area("Output tables", value=row.get("OutputTables",""), key=f"sc_et_{orig_idx}", height=80)
                     e_notes   = st.text_area("Notes",       value=row.get("Notes",""),       key=f"sc_eno_{orig_idx}", height=80)
-                    e_code    = st.text_area("Code",        value=row.get("Code",""),        key=f"sc_eco_{orig_idx}", height=160)
+                    e_lang_opts = ["SQL","Python","Shell / Bash","DAX","Other"]
+                    e_lang    = st.selectbox("Language", e_lang_opts,
+                                            index=e_lang_opts.index(row.get("Language","SQL")) if row.get("Language") in e_lang_opts else 0,
+                                            key=f"sc_elang_{orig_idx}")
+                    e_code    = st.text_area("Code",        value=row.get("Code",""),        key=f"sc_eco_{orig_idx}", height=200)
 
-                    if st.button("💾 Save changes", key=f"sc_sv_{orig_idx}", use_container_width=True):
+                    scb1, scb2 = st.columns(2)
+                    if scb1.button("💾 Save changes", key=f"sc_sv_{orig_idx}", use_container_width=True):
                         for col, val in [("Name",e_name),("Schedule",e_sched),("Owner",e_owner),
                                          ("LastRun",e_lastrun),("Description",e_desc),
-                                         ("Notebooks",e_nbs),("OutputTables",e_tables),("Notes",e_notes),("Code",e_code)]:
+                                         ("Notebooks",e_nbs),("OutputTables",e_tables),("Notes",e_notes),
+                                         ("Language",e_lang),("Code",e_code)]:
                             if val != row.get(col,""):
                                 dm().update_cell("Scripts", orig_idx, col, val)
                         invalidate("Scripts")
                         st.toast("Saved!")
+                        st.rerun()
+                    if scb2.button("🗑 Delete", key=f"sc_del_{orig_idx}", use_container_width=True):
+                        dm().delete_row("Scripts", orig_idx)
+                        invalidate("Scripts")
+                        st.toast("Deleted!")
                         st.rerun()
 
 
