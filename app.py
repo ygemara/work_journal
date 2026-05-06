@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, date
 from data_manager import SheetsManager
 
-st.set_page_config(page_title="Dashboard", page_icon="📋", layout="wide")
+st.set_page_config(page_title="Manager Dashboard", page_icon="📋", layout="wide")
 
 st.markdown("""
 <style>
@@ -25,7 +25,7 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("## 🔒 Dashboard")
+    st.markdown("## 🔒 Manager Dashboard")
     with st.form("login"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
@@ -118,7 +118,7 @@ def resolve_image_url(url: str) -> str:
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 📋 Dashboard")
+    st.markdown("## 📋 Manager Dashboard")
     st.success("☁️ Google Sheets connected")
     st.markdown("---")
     st.markdown("### 👥 Your Team")
@@ -152,7 +152,7 @@ with st.sidebar:
 
 
 # ── header ────────────────────────────────────────────────────────────────────
-st.markdown("# 📋 Dashboard")
+st.markdown("# 📋 Manager Dashboard")
 c0, c_status = st.columns([4, 1])
 c0.caption(date.today().strftime("%A, %B %d, %Y"))
 c_status.success("☁️ Connected")
@@ -504,6 +504,8 @@ with tab_scripts:
             sc_lastrun = st.text_input("Last run", key="sc_lastrun", placeholder="e.g. 2026-04-27 06:00")
             sc_notes   = st.text_area("Notes / known issues", key="sc_notes", height=80,
                                       placeholder="Quirks, known issues, dependencies...")
+            sc_code    = st.text_area("Code (optional)", key="sc_code", height=160,
+                                      placeholder="Paste the main script or key code blocks here...")
             if st.button("Save Script", type="primary", use_container_width=True):
                 if not sc_name.strip():
                     st.warning("Name required.")
@@ -514,6 +516,7 @@ with tab_scripts:
                         "OutputTables": sc_tables.strip(), "Owner": sc_owner.strip(),
                         "Status": sc_status, "LastRun": sc_lastrun.strip(),
                         "Notes": sc_notes.strip(),
+                        "Code": sc_code.strip(),
                         "Created": str(date.today()),
                     }, sheet="Scripts", success_msg="Script saved!")
 
@@ -592,6 +595,10 @@ with tab_scripts:
                         st.markdown("**⚠️ Notes / known issues:**")
                         st.warning(row["Notes"])
 
+                    if row.get("Code"):
+                        st.markdown("**💻 Code:**")
+                        st.code(row["Code"])
+
                     st.markdown("---")
                     st.markdown("**Edit:**")
                     e_name    = st.text_input("Name",       value=row.get("Name",""),        key=f"sc_en_{orig_idx}")
@@ -604,11 +611,12 @@ with tab_scripts:
                     e_nbs     = st.text_area("Notebooks",   value=row.get("Notebooks",""),   key=f"sc_enb_{orig_idx}", height=80)
                     e_tables  = st.text_area("Output tables", value=row.get("OutputTables",""), key=f"sc_et_{orig_idx}", height=80)
                     e_notes   = st.text_area("Notes",       value=row.get("Notes",""),       key=f"sc_eno_{orig_idx}", height=80)
+                    e_code    = st.text_area("Code",        value=row.get("Code",""),        key=f"sc_eco_{orig_idx}", height=160)
 
                     if st.button("💾 Save changes", key=f"sc_sv_{orig_idx}", use_container_width=True):
                         for col, val in [("Name",e_name),("Schedule",e_sched),("Owner",e_owner),
                                          ("LastRun",e_lastrun),("Description",e_desc),
-                                         ("Notebooks",e_nbs),("OutputTables",e_tables),("Notes",e_notes)]:
+                                         ("Notebooks",e_nbs),("OutputTables",e_tables),("Notes",e_notes),("Code",e_code)]:
                             if val != row.get(col,""):
                                 dm().update_cell("Scripts", orig_idx, col, val)
                         invalidate("Scripts")
