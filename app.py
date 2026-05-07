@@ -597,12 +597,10 @@ with tab_scripts:
                     nb1, nb2 = st.columns(2)
                     if row.get("Notebooks"):
                         nb1.markdown("**📓 Notebooks / child scripts:**")
-                        for nb in row["Notebooks"].split("\n"):
-                            if nb.strip(): nb1.markdown(f"- {nb.strip()}")
+                        nb1.text(row["Notebooks"])
                     if row.get("OutputTables"):
                         nb2.markdown("**📊 Output tables / destinations:**")
-                        for t in row["OutputTables"].split("\n"):
-                            if t.strip(): nb2.markdown(f"- {t.strip()}")
+                        nb2.text(row["OutputTables"])
 
                     if row.get("Notes"):
                         st.markdown("**⚠️ Notes / known issues:**")
