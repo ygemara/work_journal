@@ -112,6 +112,45 @@ def is_image_url(url: str) -> bool:
     return url.lower().split("?")[0].endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
 
 
+def image_upload_widget(uploader_key: str, target_key: str):
+    """File uploader + button that uploads to Drive and stores the link in session_state[target_key]."""
+    folder_id = st.secrets.get("drive_folder_id", "")
+    uploaded = st.file_uploader("Or upload an image", type=["png","jpg","jpeg","gif","webp"], key=uploader_key, label_visibility="collapsed")
+    if uploaded is not None and st.button("📤 Upload image", key=f"{uploader_key}_btn"):
+        if not folder_id:
+            st.error("drive_folder_id not configured in secrets.")
+        else:
+            try:
+                link = dm().upload_file_to_drive(uploaded.read(), uploaded.name, uploaded.type, folder_id)
+                st.session_state[target_key] = link
+                st.toast("Uploaded!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Upload failed: {e}")
+
+
+def files_upload_widget(uploader_key: str, target_key: str):
+    """File uploader (multi) + button that uploads to Drive and appends links into session_state[target_key]."""
+    folder_id = st.secrets.get("drive_folder_id", "")
+    uploaded_files = st.file_uploader("Or upload files", accept_multiple_files=True, key=uploader_key, label_visibility="collapsed")
+    if uploaded_files and st.button("📤 Upload files", key=f"{uploader_key}_btn"):
+        if not folder_id:
+            st.error("drive_folder_id not configured in secrets.")
+        else:
+            new_lines = []
+            for f in uploaded_files:
+                try:
+                    link = dm().upload_file_to_drive(f.read(), f.name, f.type, folder_id)
+                    new_lines.append(f"{f.name}: {link}")
+                except Exception as e:
+                    st.error(f"❌ Failed to upload {f.name}: {e}")
+            if new_lines:
+                current = st.session_state.get(target_key, "")
+                st.session_state[target_key] = (current + "\n" + "\n".join(new_lines)).strip()
+                st.toast(f"Uploaded {len(new_lines)} file(s)!")
+                st.rerun()
+
+
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 📋 Manager Dashboard")
@@ -303,6 +342,7 @@ with tab_actions:
         ac_src   = r1c4.selectbox("From", ["1:1","Team Meeting","Issue","Email","Other"], key="ac_src")
         ac_notes = st.text_area("Notes / context", key="ac_notes", height=200,
                                 placeholder="What exactly needs to be done?")
+        image_upload_widget("ac_img_upl", "ac_img")
         ac_img = st.text_input("Image URL (optional)", key="ac_img",
                                placeholder="Paste Imgur or Google Drive link")
         if st.button("Add Action", type="primary", use_container_width=True):
@@ -382,6 +422,7 @@ with tab_actions:
                     e_task  = st.text_input("Task",       value=row.get("Task",""),    key=f"ac_et_{orig_idx}")
                     e_owner = st.text_input("Owner",      value=row.get("Owner",""),   key=f"ac_eo_{orig_idx}")
                     e_notes = st.text_area("Notes",       value=row.get("Notes",""),   key=f"ac_en_{orig_idx}", height=200)
+                    image_upload_widget(f"ac_ei_upl_{orig_idx}", f"ac_ei_{orig_idx}")
                     e_img   = st.text_input("Image URL",  value=row.get("ImageURL",""),key=f"ac_ei_{orig_idx}", placeholder="Paste Imgur or Google Drive link")
                     sb1, sb2 = st.columns(2)
                     if sb1.button("💾 Save changes", key=f"ac_sv_{orig_idx}", use_container_width=True):
@@ -422,6 +463,7 @@ with tab_meetings:
                                     placeholder="What was discussed?")
         mt_questions = st.text_area("Outstanding questions", key="mt_questions", height=150,
                                     placeholder="What's still unresolved?")
+        image_upload_widget("mt_img_upl", "mt_img")
         mt_img = st.text_input("Image URL (optional)", key="mt_img",
                               placeholder="Paste Imgur or Google Drive link")
         if st.button("Save Meeting", type="primary", use_container_width=True):
@@ -473,6 +515,7 @@ with tab_meetings:
                 e_att   = st.text_input("Attendees", value=row.get("Attendees",""), key=f"mt_ea_{orig_idx}")
                 e_notes = st.text_area("Notes / summary",      value=row.get("Notes",""),     key=f"mt_en_{orig_idx}", height=250)
                 e_qs    = st.text_area("Outstanding questions", value=row.get("Questions",""), key=f"mt_eq_{orig_idx}", height=150)
+                image_upload_widget(f"mt_ei_upl_{orig_idx}", f"mt_ei_{orig_idx}")
                 e_img = st.text_input("Image URL", value=row.get("ImageURL",""), key=f"mt_ei_{orig_idx}", placeholder="Paste Imgur or Google Drive link")
                 if row.get("ImageURL"):
                     st.image(resolve_image_url(row["ImageURL"]), use_container_width=True)
@@ -506,6 +549,7 @@ with tab_invest:
         inv_tags   = st.text_input("Tags (optional)", key="inv_tags", placeholder="e.g. ETL, duplicates, StorTrack")
         inv_summary = st.text_area("Summary", key="inv_summary", height=300,
                                    placeholder="What's the investigation about? What have you found so far? Paste chat summaries, findings, conclusions here.")
+        files_upload_widget("inv_files_upl", "inv_files")
         inv_files = st.text_area("Files / links (one per line, optional)", key="inv_files", height=100,
                                  placeholder="Screenshot of issue: https://imgur.com/...\nFull data export: https://drive.google.com/...")
         if st.button("Save Investigation", type="primary", use_container_width=True):
@@ -595,6 +639,7 @@ with tab_invest:
                 e_title   = st.text_input("Title", value=row.get("Title",""), key=f"inv_et_{orig_idx}")
                 e_tags    = st.text_input("Tags",  value=row.get("Tags",""),  key=f"inv_etg_{orig_idx}")
                 e_summary = st.text_area("Summary", value=row.get("Summary",""), key=f"inv_es_{orig_idx}", height=300)
+                files_upload_widget(f"inv_ef_upl_{orig_idx}", f"inv_ef_{orig_idx}")
                 e_files   = st.text_area("Files / links", value=row.get("Files",""), key=f"inv_ef_{orig_idx}", height=100)
 
                 ib1, ib2 = st.columns(2)
@@ -789,6 +834,7 @@ with tab_procedures:
                                 placeholder="Write the steps here. Use numbered lists, bullet points, etc.")
         pr_notes = st.text_area("Notes / context", key="pr_notes", height=120,
                                 placeholder="When to use this, prerequisites, gotchas...")
+        image_upload_widget("pr_img_upl", "pr_img")
         pr_img = st.text_input("Image URL (optional)", key="pr_img",
                               placeholder="Paste Imgur or Google Drive link")
         if st.button("Save Procedure", type="primary", use_container_width=True):
@@ -854,6 +900,7 @@ with tab_procedures:
                 e_steps = st.text_area("Steps",     value=row.get("Steps",""),    key=f"pr_es_{orig_idx}", height=300)
                 e_notes = st.text_area("Notes",     value=row.get("Notes",""),    key=f"pr_en_{orig_idx}", height=120)
                 e_tags  = st.text_input("Tags",     value=row.get("Tags",""),     key=f"pr_etg_{orig_idx}")
+                image_upload_widget(f"pr_ei_upl_{orig_idx}", f"pr_ei_{orig_idx}")
                 e_img = st.text_input("Image URL", value=row.get("ImageURL",""), key=f"pr_ei_{orig_idx}")
 
                 pb1, pb2 = st.columns(2)
