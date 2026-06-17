@@ -11,6 +11,7 @@ SCHEMAS: dict[str, list[str]] = {
     "Meetings":    ["Title", "Date", "Attendees", "Notes", "Questions", "Created", "ImageURL"],
     "Scripts":     ["Name", "Schedule", "Description", "Notebooks", "OutputTables", "Owner", "Status", "LastRun", "Notes", "Code", "Language", "Created"],
     "Procedures":  ["Title", "Category", "Steps", "Notes", "Tags", "Created", "ImageURL"],
+    "Investigations": ["Title", "Status", "Summary", "Files", "Tags", "Created"],
     "DataDict":    ["OutputTable", "Column", "SourceTable", "SourceColumn", "Script", "Transform", "Notes", "Created"],
     "Reference":   ["Title", "Category", "Content", "Explanation", "Tags", "Created"],
     "Agenda":      ["Person", "Topic", "Category", "AddedBy", "Discussed", "Created"],
@@ -162,12 +163,10 @@ class SheetsManager:
 
     def update_cell(self, sheet: str, df_index: int, column: str, value: Any):
         ws = self._ws(sheet)
-        cols = SCHEMAS.get(sheet, [])
-        try:
-            col_idx = cols.index(column) + 1
-        except ValueError:
-            header = ws.row_values(1)
-            col_idx = header.index(column) + 1
+        header = ws.row_values(1)
+        if column not in header:
+            return  # column doesn't exist in sheet, skip silently
+        col_idx = header.index(column) + 1
         ws.update_cell(df_index + 2, col_idx, value)
 
     def delete_row(self, sheet: str, df_index: int):
