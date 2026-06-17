@@ -225,7 +225,8 @@ tab_issues, tab_actions, tab_meetings, tab_invest, tab_scripts, tab_procedures, 
 with tab_issues:
     st.markdown('<div class="section-header">Outstanding Issues</div>', unsafe_allow_html=True)
 
-    with st.container(border=True):
+    form_col, _ = st.columns([5, 2])
+    with form_col, st.container(border=True):
         st.markdown("**➕ Log a new issue**")
         r1c1, r1c2, r1c3, r1c4 = st.columns(4)
         i_title    = r1c1.text_input("Title", key="i_title")
@@ -333,7 +334,8 @@ with tab_issues:
 with tab_actions:
     st.markdown('<div class="section-header">Action Items & Follow-ups</div>', unsafe_allow_html=True)
 
-    with st.container(border=True):
+    form_col, _ = st.columns([5, 2])
+    with form_col, st.container(border=True):
         st.markdown("**➕ New action item**")
         r1c1, r1c2, r1c3, r1c4 = st.columns(4)
         ac_task  = r1c1.text_input("Task", key="ac_task")
@@ -453,7 +455,8 @@ with tab_actions:
 with tab_meetings:
     st.markdown('<div class="section-header">Meeting Summaries</div>', unsafe_allow_html=True)
 
-    with st.container(border=True):
+    form_col, _ = st.columns([5, 2])
+    with form_col, st.container(border=True):
         st.markdown("**➕ Log a meeting**")
         r1c1, r1c2, r1c3 = st.columns(3)
         mt_title     = r1c1.text_input("Meeting title", key="mt_title")
@@ -541,7 +544,8 @@ with tab_invest:
     st.markdown('<div class="section-header">Investigations</div>', unsafe_allow_html=True)
     st.caption("For bigger, multi-session investigations. Attach files by pasting links (Google Drive, Imgur, etc.) — one per line, optionally labeled.")
 
-    with st.container(border=True):
+    form_col, _ = st.columns([5, 2])
+    with form_col, st.container(border=True):
         st.markdown("**➕ Start a new investigation**")
         r1c1, r1c2 = st.columns([2, 1])
         inv_title  = r1c1.text_input("Title", key="inv_title", placeholder="e.g. Duplicate properties in StorTrack ETL")
@@ -664,7 +668,8 @@ with tab_scripts:
     st.markdown('<div class="section-header">Script & Pipeline Tracker</div>', unsafe_allow_html=True)
     st.caption("Track scheduled scripts — what they run, what notebooks they call, what tables they write to, and how often.")
 
-    with st.container(border=True):
+    form_col, _ = st.columns([5, 2])
+    with form_col, st.container(border=True):
         st.markdown("**➕ Add a script / pipeline**")
         r1c1, r1c2, r1c3 = st.columns(3)
         sc_name    = r1c1.text_input("Script name", key="sc_name", placeholder="e.g. Daily Sales Refresh")
@@ -821,7 +826,8 @@ with tab_procedures:
     st.markdown('<div class="section-header">Procedures & Processes</div>', unsafe_allow_html=True)
     st.caption("Document how things work — debugging steps, deployment processes, runbooks, how-tos.")
 
-    with st.container(border=True):
+    form_col, _ = st.columns([5, 2])
+    with form_col, st.container(border=True):
         st.markdown("**➕ Add a procedure**")
         r1c1, r1c2 = st.columns(2)
         pr_title = r1c1.text_input("Title", key="pr_title", placeholder="e.g. How to debug Power BI refresh")
