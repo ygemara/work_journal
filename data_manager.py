@@ -126,8 +126,24 @@ class SheetsManager:
         if not GSPREAD_AVAILABLE:
             raise ImportError("gspread not installed")
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        self._creds = creds
         self._gc = gspread.authorize(creds)
         self._sh = self._gc.open_by_key(spreadsheet_id)
+
+    def upload_file_to_drive(self, file_bytes: bytes, filename: str, mime_type: str, folder_id: str) -> str:
+        """Upload a file to a Drive folder using the same service account. Returns a shareable view link."""
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseUpload
+        import io
+
+        drive_service = build("drive", "v3", credentials=self._creds)
+        file_metadata = {"name": filename, "parents": [folder_id]}
+        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type or "application/octet-stream", resumable=False)
+        uploaded = drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+        file_id = uploaded.get("id")
+        # Make it viewable by anyone with the link
+        drive_service.permissions().create(fileId=file_id, body={"type": "anyone", "role": "reader"}).execute()
+        return f"https://drive.google.com/file/d/{file_id}/view"
 
     def _refresh_ws_cache(self):
         """Load all worksheet objects in one API call and cache them."""
