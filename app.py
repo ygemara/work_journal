@@ -208,6 +208,7 @@ except Exception as e:
 st.markdown("---")
 
 tabs = st.tabs([
+    "☑️ TODO",
     "🔴 Issues",
     "✅ Action Items",
     "🗒 Meetings",
@@ -216,7 +217,58 @@ tabs = st.tabs([
     "📋 Procedures",
     "📝 Notes",
 ])
-tab_issues, tab_actions, tab_meetings, tab_invest, tab_scripts, tab_procedures, tab_notes = tabs
+tab_todo, tab_issues, tab_actions, tab_meetings, tab_invest, tab_scripts, tab_procedures, tab_notes = tabs
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TODO
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_todo:
+    st.markdown('<div class="section-header">TODO</div>', unsafe_allow_html=True)
+
+    # Quick-add input
+    col_in, col_btn = st.columns([5, 1])
+    new_task = col_in.text_input("Add a task", key="todo_input", placeholder="What needs doing?", label_visibility="collapsed")
+    if col_btn.button("➕ Add", use_container_width=True) and new_task.strip():
+        save(dm().append_row, "TODO", {
+            "Task": new_task.strip(), "Done": "No", "Created": str(date.today()),
+        }, sheet="TODO", success_msg=None)
+
+    st.markdown("---")
+
+    df = get_data("TODO")
+    if df.empty:
+        st.info("Nothing here yet — type above to add your first task.")
+    else:
+        pending = df[df["Done"] == "No"].reset_index(drop=False) if "Done" in df.columns else df.reset_index(drop=False)
+        done_df = df[df["Done"] == "Yes"].reset_index(drop=False) if "Done" in df.columns else pd.DataFrame()
+
+        if pending.empty:
+            st.success("🎉 All done!")
+        else:
+            for _, row in pending.iterrows():
+                orig_idx = int(row["index"])
+                c1, c2, c3 = st.columns([6, 1, 1])
+                c1.markdown(f"**{row.get('Task','')}** <small style='color:#94a3b8'>&nbsp;{row.get('Created','')}</small>", unsafe_allow_html=True)
+                if c2.button("✓", key=f"td_done_{orig_idx}", use_container_width=True):
+                    dm().update_cell("TODO", orig_idx, "Done", "Yes")
+                    invalidate("TODO")
+                    st.rerun()
+                if c3.button("🗑", key=f"td_del_{orig_idx}", use_container_width=True):
+                    dm().delete_row("TODO", orig_idx)
+                    invalidate("TODO")
+                    st.rerun()
+
+        if not done_df.empty:
+            with st.expander(f"✅ {len(done_df)} completed"):
+                for _, row in done_df.iterrows():
+                    orig_idx = int(row["index"])
+                    c1, c2 = st.columns([7, 1])
+                    c1.markdown(f"~~{row.get('Task','')}~~")
+                    if c2.button("🗑", key=f"td_ddel_{orig_idx}", use_container_width=True):
+                        dm().delete_row("TODO", orig_idx)
+                        invalidate("TODO")
+                        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
