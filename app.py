@@ -248,16 +248,30 @@ with tab_todo:
         else:
             for _, row in pending.iterrows():
                 orig_idx = int(row["index"])
-                c1, c2, c3 = st.columns([6, 1, 1])
-                c1.markdown(f"**{row.get('Task','')}** <small style='color:#94a3b8'>&nbsp;{row.get('Created','')}</small>", unsafe_allow_html=True)
-                if c2.button("✓", key=f"td_done_{orig_idx}", use_container_width=True):
-                    dm().update_cell("TODO", orig_idx, "Done", "Yes")
-                    invalidate("TODO")
-                    st.rerun()
-                if c3.button("🗑", key=f"td_del_{orig_idx}", use_container_width=True):
-                    dm().delete_row("TODO", orig_idx)
-                    invalidate("TODO")
-                    st.rerun()
+                with st.container(border=True):
+                    c1, c2, c3, c4 = st.columns([6, 1, 1, 1])
+                    c1.markdown(f"{row.get('Task','')} <small style='color:#94a3b8'>&nbsp;{row.get('Created','')}</small>", unsafe_allow_html=True)
+                    if c2.button("✓", key=f"td_done_{orig_idx}", use_container_width=True, help="Mark done"):
+                        dm().update_cell("TODO", orig_idx, "Done", "Yes")
+                        invalidate("TODO")
+                        st.rerun()
+                    if c3.button("✏️", key=f"td_edit_{orig_idx}", use_container_width=True, help="Edit"):
+                        st.session_state[f"editing_todo_{orig_idx}"] = True
+                    if c4.button("🗑", key=f"td_del_{orig_idx}", use_container_width=True, help="Delete"):
+                        dm().delete_row("TODO", orig_idx)
+                        invalidate("TODO")
+                        st.rerun()
+                    if st.session_state.get(f"editing_todo_{orig_idx}"):
+                        new_val = st.text_input("Edit task", value=row.get("Task",""), key=f"td_val_{orig_idx}")
+                        s1, s2 = st.columns(2)
+                        if s1.button("💾 Save", key=f"td_sv_{orig_idx}", use_container_width=True):
+                            dm().update_cell("TODO", orig_idx, "Task", new_val.strip())
+                            st.session_state[f"editing_todo_{orig_idx}"] = False
+                            invalidate("TODO")
+                            st.rerun()
+                        if s2.button("Cancel", key=f"td_cancel_{orig_idx}", use_container_width=True):
+                            st.session_state[f"editing_todo_{orig_idx}"] = False
+                            st.rerun()
 
         if not done_df.empty:
             with st.expander(f"✅ {len(done_df)} completed"):
