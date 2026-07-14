@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, date
 from data_manager import SheetsManager
 
-st.set_page_config(page_title="Manager Dashboard", page_icon="📋", layout="wide")
+st.set_page_config(page_title="Task Dashboard", page_icon="📋", layout="wide")
 
 st.markdown("""
 <style>
@@ -25,7 +25,7 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("## 🔒 Manager Dashboard")
+    st.markdown("## 🔒 Task Dashboard")
     with st.form("login"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
