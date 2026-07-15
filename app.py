@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, date
 from data_manager import SheetsManager
 
-st.set_page_config(page_title="Task Dashboard", page_icon="📋", layout="wide")
+st.set_page_config(page_title="Manager Dashboard", page_icon="📋", layout="wide")
 
 st.markdown("""
 <style>
@@ -25,12 +25,12 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("## 🔒 Task Dashboard")
+    st.markdown("## 🔒 Manager Dashboard")
     with st.form("login"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.form_submit_button("Log in", type="primary"):
-            if username == "admin" and password == "admin218":
+            if username == "admin" and password == "admin":
                 st.session_state.authenticated = True
                 st.rerun()
             else:
@@ -215,9 +215,10 @@ tabs = st.tabs([
     "🔍 Investigations",
     "🔬 Scripts",
     "📋 Procedures",
+    "✔️ Resolutions",
     "📝 Notes",
 ])
-tab_todo, tab_issues, tab_actions, tab_meetings, tab_invest, tab_scripts, tab_procedures, tab_notes = tabs
+tab_todo, tab_issues, tab_actions, tab_meetings, tab_invest, tab_scripts, tab_procedures, tab_resolutions, tab_notes = tabs
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -987,6 +988,131 @@ with tab_procedures:
                 if pb2.button("🗑 Delete", key=f"pr_del_{orig_idx}", use_container_width=True):
                     dm().delete_row("Procedures", orig_idx)
                     invalidate("Procedures")
+                    st.toast("Deleted!")
+                    st.rerun()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RESOLUTIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_resolutions:
+    st.markdown('<div class="section-header">Resolutions</div>', unsafe_allow_html=True)
+    st.caption("Document how specific issues were solved — what the problem was, what you tried, and what actually fixed it.")
+
+    form_col, _ = st.columns([5, 2])
+    with form_col, st.container(border=True):
+        st.markdown("**➕ Log a resolution**")
+        r1c1, r1c2 = st.columns(2)
+        res_title = r1c1.text_input("Title", key="res_title", placeholder="e.g. Duplicate properties in daily rent roll")
+        res_tags  = r1c2.text_input("Tags", key="res_tags", placeholder="e.g. ETL, duplicates, Databricks")
+        res_problem = st.text_area("What was the problem?", key="res_problem", height=120,
+                                   placeholder="Describe the issue — what was wrong, what symptoms you saw...")
+        res_steps = st.text_area("What did you try?", key="res_steps", height=120,
+                                 placeholder="Steps taken, things that didn't work, dead ends...")
+        res_solution = st.text_area("What fixed it?", key="res_solution", height=150,
+                                    placeholder="The actual solution — be specific so you can repeat it later...")
+        files_upload_widget("res_files_upl", "res_files")
+        res_files = st.text_area("Files / links (one per line)", key="res_files", height=80,
+                                 placeholder="Screenshot: https://...\nScript: https://...")
+        if st.button("Save Resolution", type="primary", use_container_width=True):
+            if not res_title.strip():
+                st.warning("Title required.")
+            else:
+                save(dm().append_row, "Resolutions", {
+                    "Title": res_title.strip(),
+                    "Problem": res_problem.strip(),
+                    "Steps": res_steps.strip(),
+                    "Solution": res_solution.strip(),
+                    "Files": res_files.strip(),
+                    "Tags": res_tags.strip(),
+                    "Created": str(date.today()),
+                }, sheet="Resolutions", success_msg="Resolution saved!")
+
+    st.markdown("---")
+
+    df = get_data("Resolutions")
+    if df.empty:
+        st.info("No resolutions yet. When you solve a tricky issue, log it here so you don't have to figure it out again.")
+    else:
+        sc1, sc2 = st.columns([3, 1])
+        search = sc1.text_input("🔍 Search", key="res_search")
+        view = df.copy().reset_index(drop=False)
+        if "Created" in view.columns: view = view.sort_values("Created", ascending=False)
+        if search: view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
+
+        edit_df = add_delete_col(view[[c for c in ["index","Title","Tags","Created"] if c in view.columns]])
+        edited = st.data_editor(edit_df, column_config={
+            "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
+            "index":  st.column_config.Column("Row", disabled=True, width="small"),
+        }, use_container_width=True, hide_index=True, key="res_editor")
+
+        if st.button("🗑 Delete selected", key="res_del", use_container_width=True):
+            to_del = edited[edited["Delete"] == True]["index"].tolist()
+            if not to_del:
+                st.info("Tick rows first.")
+            else:
+                for idx in sorted(to_del, reverse=True):
+                    dm().delete_row("Resolutions", int(idx))
+                invalidate("Resolutions")
+                st.rerun()
+
+        st.markdown("---")
+        for _, row in view.iterrows():
+            orig_idx = int(row["index"])
+            with st.expander(f"**{row.get('Title','')}**  ·  {row.get('Created','')}"):
+                if row.get("Tags"):
+                    st.markdown(" ".join([f"`{t.strip()}`" for t in row["Tags"].split(",") if t.strip()]))
+
+                if row.get("Problem"):
+                    st.markdown("**🔴 Problem:**")
+                    st.markdown(row["Problem"])
+
+                if row.get("Steps"):
+                    st.markdown("**🔄 What was tried:**")
+                    st.markdown(row["Steps"])
+
+                if row.get("Solution"):
+                    st.markdown("**✅ What fixed it:**")
+                    st.success(row["Solution"])
+
+                if row.get("Files"):
+                    st.markdown("**📎 Files / links:**")
+                    for line in row["Files"].split("\n"):
+                        line = line.strip()
+                        if not line: continue
+                        if ":" in line and "http" in line.split(":",1)[1]:
+                            label, url = line.split(":", 1)
+                            url = url.strip()
+                            st.markdown(f"- [{label.strip()}]({url})")
+                            if is_image_url(url) or "imgur" in url or "drive.google" in url:
+                                st.image(resolve_image_url(url))
+                        elif line.startswith("http"):
+                            st.markdown(f"- [{line}]({line})")
+                        else:
+                            st.markdown(f"- {line}")
+
+                st.markdown("---")
+                st.markdown("### ✏️ Edit")
+                e_title    = st.text_input("Title",            value=row.get("Title",""),    key=f"res_et_{orig_idx}")
+                e_tags     = st.text_input("Tags",             value=row.get("Tags",""),     key=f"res_etg_{orig_idx}")
+                e_problem  = st.text_area("Problem",           value=row.get("Problem",""),  key=f"res_ep_{orig_idx}", height=120)
+                e_steps    = st.text_area("What was tried",    value=row.get("Steps",""),    key=f"res_es_{orig_idx}", height=120)
+                e_solution = st.text_area("What fixed it",     value=row.get("Solution",""), key=f"res_esol_{orig_idx}", height=150)
+                files_upload_widget(f"res_ef_upl_{orig_idx}", f"res_ef_{orig_idx}")
+                e_files    = st.text_area("Files / links",     value=row.get("Files",""),    key=f"res_ef_{orig_idx}", height=80)
+
+                rb1, rb2 = st.columns(2)
+                if rb1.button("💾 Save", key=f"res_sv_{orig_idx}", use_container_width=True):
+                    for col, val in [("Title",e_title),("Tags",e_tags),("Problem",e_problem),
+                                     ("Steps",e_steps),("Solution",e_solution),("Files",e_files)]:
+                        if val != row.get(col,""):
+                            dm().update_cell("Resolutions", orig_idx, col, val)
+                    invalidate("Resolutions")
+                    st.toast("Saved!")
+                    st.rerun()
+                if rb2.button("🗑 Delete", key=f"res_del_{orig_idx}", use_container_width=True):
+                    dm().delete_row("Resolutions", orig_idx)
+                    invalidate("Resolutions")
                     st.toast("Deleted!")
                     st.rerun()
 
