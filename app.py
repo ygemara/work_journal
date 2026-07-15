@@ -212,13 +212,13 @@ tabs = st.tabs([
     "🔴 Issues",
     "✅ Action Items",
     "🗒 Meetings",
-    "🔍 Investigations",
+    "🏗️ Projects",
     "🔬 Scripts",
     "📋 Procedures",
     "✔️ Resolutions",
     "📝 Notes",
 ])
-tab_todo, tab_issues, tab_actions, tab_meetings, tab_invest, tab_scripts, tab_procedures, tab_resolutions, tab_notes = tabs
+tab_todo, tab_issues, tab_actions, tab_meetings, tab_projects, tab_scripts, tab_procedures, tab_resolutions, tab_notes = tabs
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -606,76 +606,84 @@ with tab_meetings:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# INVESTIGATIONS
+# PROJECTS
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab_invest:
-    st.markdown('<div class="section-header">Investigations</div>', unsafe_allow_html=True)
-    st.caption("For bigger, multi-session investigations. Attach files by pasting links (Google Drive, Imgur, etc.) — one per line, optionally labeled.")
+with tab_projects:
+    st.markdown('<div class="section-header">Projects</div>', unsafe_allow_html=True)
+    st.caption("Document significant work — models, pipelines, dashboards, analyses. A living record that grows over time.")
 
     form_col, _ = st.columns([5, 2])
     with form_col, st.container(border=True):
-        st.markdown("**➕ Start a new investigation**")
-        r1c1, r1c2 = st.columns([2, 1])
-        inv_title  = r1c1.text_input("Title", key="inv_title", placeholder="e.g. Duplicate properties in StorTrack ETL")
-        inv_status = r1c2.selectbox("Status", ["Open","Ongoing","Resolved"], key="inv_status")
-        inv_tags   = st.text_input("Tags (optional)", key="inv_tags", placeholder="e.g. ETL, duplicates, StorTrack")
-        inv_summary = st.text_area("Summary", key="inv_summary", height=300,
-                                   placeholder="What's the investigation about? What have you found so far? Paste chat summaries, findings, conclusions here.")
-        files_upload_widget("inv_files_upl", "inv_files")
-        inv_files = st.text_area("Files / links (one per line, optional)", key="inv_files", height=100,
-                                 placeholder="Screenshot of issue: https://imgur.com/...\nFull data export: https://drive.google.com/...")
-        if st.button("Save Investigation", type="primary", use_container_width=True):
-            if not inv_title.strip():
+        st.markdown("**➕ Add a project**")
+        r1c1, r1c2 = st.columns(2)
+        proj_title  = r1c1.text_input("Title", key="proj_title", placeholder="e.g. Deal Prioritization ML Model")
+        proj_status = r1c2.selectbox("Status", ["In Progress","Complete","On Hold","Planned"], key="proj_status")
+        proj_tags   = st.text_input("Tags", key="proj_tags", placeholder="e.g. ML, Databricks, Monday.com")
+        proj_desc   = st.text_area("What is it / why?", key="proj_desc", height=120,
+                                   placeholder="What are you building and what problem does it solve?")
+        proj_approach = st.text_area("Approach / methodology", key="proj_approach", height=150,
+                                     placeholder="How are you going about it? What tools, models, data sources?")
+        proj_results  = st.text_area("Results / findings", key="proj_results", height=150,
+                                     placeholder="What did you find or build? Performance metrics, outputs, conclusions...")
+        proj_next     = st.text_area("Next steps / comments", key="proj_next", height=100,
+                                     placeholder="What still needs to be done? Open questions, future improvements...")
+        files_upload_widget("proj_files_upl", "proj_files")
+        proj_files = st.text_area("Files / links (one per line)", key="proj_files", height=80,
+                                  placeholder="Notebook: https://...\nResults chart: https://...")
+        if st.button("Save Project", type="primary", use_container_width=True):
+            if not proj_title.strip():
                 st.warning("Title required.")
             else:
-                save(dm().append_row, "Investigations", {
-                    "Title": inv_title.strip(), "Status": inv_status,
-                    "Summary": inv_summary.strip(), "Files": inv_files.strip(),
-                    "Tags": inv_tags.strip(), "Created": str(date.today()),
-                }, sheet="Investigations", success_msg="Investigation saved!")
+                save(dm().append_row, "Projects", {
+                    "Title": proj_title.strip(), "Status": proj_status,
+                    "Description": proj_desc.strip(), "Approach": proj_approach.strip(),
+                    "Results": proj_results.strip(), "NextSteps": proj_next.strip(),
+                    "Files": proj_files.strip(), "Tags": proj_tags.strip(),
+                    "Created": str(date.today()),
+                }, sheet="Projects", success_msg="Project saved!")
 
     st.markdown("---")
 
-    df = get_data("Investigations")
+    df = get_data("Projects")
     if df.empty:
-        st.info("No investigations logged yet.\n\nUse this for things like:\n- A multi-day debugging effort\n- A data discrepancy you're tracking down\n- Anything where you need to keep notes across multiple sessions")
+        st.info("No projects yet. Add your first one above.")
     else:
         sc1, sc2 = st.columns([2, 1])
-        search   = sc1.text_input("🔍 Search", key="inv_search")
+        search   = sc1.text_input("🔍 Search", key="proj_search")
         all_st   = ["All"] + sorted(df["Status"].dropna().unique().tolist()) if "Status" in df.columns else ["All"]
-        f_status = sc2.selectbox("Status", all_st, key="inv_status_filter")
+        f_status = sc2.selectbox("Status", all_st, key="proj_status_filter")
 
         view = df.copy().reset_index(drop=False)
         if "Created" in view.columns: view = view.sort_values("Created", ascending=False)
         if search: view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
         if f_status != "All" and "Status" in view.columns: view = view[view["Status"] == f_status]
 
-        status_icon = {"Open":"🔴","Ongoing":"🟡","Resolved":"✅"}
+        status_icon = {"In Progress":"🟡","Complete":"✅","On Hold":"⏸️","Planned":"📌"}
 
         edit_df = add_delete_col(view[[c for c in ["index","Title","Status","Tags","Created"] if c in view.columns]])
         edited = st.data_editor(edit_df, column_config={
             "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
             "index":  st.column_config.Column("Row", disabled=True, width="small"),
-            "Status": st.column_config.SelectboxColumn("Status", options=["Open","Ongoing","Resolved"]),
-        }, use_container_width=True, hide_index=True, key="inv_editor")
+            "Status": st.column_config.SelectboxColumn("Status", options=["In Progress","Complete","On Hold","Planned"]),
+        }, use_container_width=True, hide_index=True, key="proj_editor")
 
         bc1, bc2 = st.columns(2)
-        if bc1.button("💾 Save status", key="inv_save", use_container_width=True):
+        if bc1.button("💾 Save status", key="proj_save", use_container_width=True):
             for _, row in edited.iterrows():
                 orig_idx = int(row["index"])
                 if row.get("Status") != df.loc[orig_idx].get("Status"):
-                    dm().update_cell("Investigations", orig_idx, "Status", row["Status"])
-            invalidate("Investigations")
+                    dm().update_cell("Projects", orig_idx, "Status", row["Status"])
+            invalidate("Projects")
             st.toast("Saved!")
             st.rerun()
-        if bc2.button("🗑 Delete selected", key="inv_del", use_container_width=True):
+        if bc2.button("🗑 Delete selected", key="proj_del", use_container_width=True):
             to_del = edited[edited["Delete"] == True]["index"].tolist()
             if not to_del:
                 st.info("Tick rows first.")
             else:
                 for idx in sorted(to_del, reverse=True):
-                    dm().delete_row("Investigations", int(idx))
-                invalidate("Investigations")
+                    dm().delete_row("Projects", int(idx))
+                invalidate("Projects")
                 st.rerun()
 
         st.markdown("---")
@@ -685,15 +693,26 @@ with tab_invest:
             with st.expander(f"{icon} **{row.get('Title','')}**  ·  {row.get('Status','')}  ·  {row.get('Created','')}"):
                 if row.get("Tags"):
                     st.markdown(" ".join([f"`{t.strip()}`" for t in row["Tags"].split(",") if t.strip()]))
-                if row.get("Summary"):
-                    st.markdown(row["Summary"])
+
+                if row.get("Description"):
+                    st.markdown("**What is it / why:**")
+                    st.markdown(row["Description"])
+                if row.get("Approach"):
+                    st.markdown("**Approach / methodology:**")
+                    st.markdown(row["Approach"])
+                if row.get("Results"):
+                    st.markdown("**Results / findings:**")
+                    st.success(row["Results"])
+                if row.get("NextSteps"):
+                    st.markdown("**Next steps / comments:**")
+                    st.info(row["NextSteps"])
 
                 if row.get("Files"):
                     st.markdown("**📎 Files / links:**")
                     for line in row["Files"].split("\n"):
                         line = line.strip()
                         if not line: continue
-                        if ":" in line and ("http" in line.split(":",1)[1]):
+                        if ":" in line and "http" in line.split(":",1)[1]:
                             label, url = line.split(":", 1)
                             url = url.strip()
                             st.markdown(f"- [{label.strip()}]({url})")
@@ -701,30 +720,33 @@ with tab_invest:
                                 st.image(resolve_image_url(url))
                         elif line.startswith("http"):
                             st.markdown(f"- [{line}]({line})")
-                            if is_image_url(line) or "imgur" in line or "drive.google" in line:
-                                st.image(resolve_image_url(line))
                         else:
                             st.markdown(f"- {line}")
 
                 st.markdown("---")
                 st.markdown("### ✏️ Edit")
-                e_title   = st.text_input("Title", value=row.get("Title",""), key=f"inv_et_{orig_idx}")
-                e_tags    = st.text_input("Tags",  value=row.get("Tags",""),  key=f"inv_etg_{orig_idx}")
-                e_summary = st.text_area("Summary", value=row.get("Summary",""), key=f"inv_es_{orig_idx}", height=300)
-                files_upload_widget(f"inv_ef_upl_{orig_idx}", f"inv_ef_{orig_idx}")
-                e_files   = st.text_area("Files / links", value=row.get("Files",""), key=f"inv_ef_{orig_idx}", height=100)
+                e_title    = st.text_input("Title",     value=row.get("Title",""),       key=f"proj_et_{orig_idx}")
+                e_tags     = st.text_input("Tags",      value=row.get("Tags",""),        key=f"proj_etg_{orig_idx}")
+                e_desc     = st.text_area("What is it / why",     value=row.get("Description",""), key=f"proj_ed_{orig_idx}", height=120)
+                e_approach = st.text_area("Approach",             value=row.get("Approach",""),    key=f"proj_ea_{orig_idx}", height=150)
+                e_results  = st.text_area("Results / findings",   value=row.get("Results",""),     key=f"proj_er_{orig_idx}", height=150)
+                e_next     = st.text_area("Next steps / comments",value=row.get("NextSteps",""),   key=f"proj_en_{orig_idx}", height=100)
+                files_upload_widget(f"proj_ef_upl_{orig_idx}", f"proj_ef_{orig_idx}")
+                e_files    = st.text_area("Files / links",        value=row.get("Files",""),       key=f"proj_ef_{orig_idx}", height=80)
 
-                ib1, ib2 = st.columns(2)
-                if ib1.button("💾 Save changes", key=f"inv_sv_{orig_idx}", use_container_width=True):
-                    for col, val in [("Title",e_title),("Tags",e_tags),("Summary",e_summary),("Files",e_files)]:
+                pb1, pb2 = st.columns(2)
+                if pb1.button("💾 Save", key=f"proj_sv_{orig_idx}", use_container_width=True):
+                    for col, val in [("Title",e_title),("Tags",e_tags),("Description",e_desc),
+                                     ("Approach",e_approach),("Results",e_results),
+                                     ("NextSteps",e_next),("Files",e_files)]:
                         if val != row.get(col,""):
-                            dm().update_cell("Investigations", orig_idx, col, val)
-                    invalidate("Investigations")
+                            dm().update_cell("Projects", orig_idx, col, val)
+                    invalidate("Projects")
                     st.toast("Saved!")
                     st.rerun()
-                if ib2.button("🗑 Delete", key=f"inv_del_{orig_idx}", use_container_width=True):
-                    dm().delete_row("Investigations", orig_idx)
-                    invalidate("Investigations")
+                if pb2.button("🗑 Delete", key=f"proj_del_{orig_idx}", use_container_width=True):
+                    dm().delete_row("Projects", orig_idx)
+                    invalidate("Projects")
                     st.toast("Deleted!")
                     st.rerun()
 
