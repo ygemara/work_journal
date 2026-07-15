@@ -13,6 +13,7 @@ SCHEMAS: dict[str, list[str]] = {
     "Procedures":  ["Title", "Category", "Steps", "Notes", "Tags", "Created", "ImageURL"],
     "Investigations": ["Title", "Status", "Summary", "Files", "Tags", "Created"],
     "TODO":           ["Task", "Done", "Created"],
+    "Resolutions":    ["Title", "Problem", "Steps", "Solution", "Files", "Tags", "Created"],
     "DataDict":    ["OutputTable", "Column", "SourceTable", "SourceColumn", "Script", "Transform", "Notes", "Created"],
     "Reference":   ["Title", "Category", "Content", "Explanation", "Tags", "Created"],
     "Agenda":      ["Person", "Topic", "Category", "AddedBy", "Discussed", "Created"],
