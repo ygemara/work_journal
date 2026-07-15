@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, date
 from data_manager import SheetsManager
 
-st.set_page_config(page_title="Manager Dashboard", page_icon="📋", layout="wide")
+st.set_page_config(page_title="Task Manager", page_icon="📋", layout="wide")
 
 st.markdown("""
 <style>
@@ -25,12 +25,12 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("## 🔒 Manager Dashboard")
+    st.markdown("## 🔒 Task Manager")
     with st.form("login"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.form_submit_button("Log in", type="primary"):
-            if username == "admin" and password == "admin":
+            if username == "admin" and password == "admin218":
                 st.session_state.authenticated = True
                 st.rerun()
             else:
@@ -153,7 +153,7 @@ def files_upload_widget(uploader_key: str, target_key: str):
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 📋 Manager Dashboard")
+    st.markdown("## 📋 Task Manager")
     st.success("☁️ Google Sheets connected")
     st.markdown("---")
     st.markdown("### 👥 Your Team")
@@ -187,7 +187,7 @@ with st.sidebar:
 
 
 # ── header ────────────────────────────────────────────────────────────────────
-st.markdown("# 📋 Manager Dashboard")
+st.markdown("# 📋 Task Manager")
 c0, c_status = st.columns([4, 1])
 c0.caption(date.today().strftime("%A, %B %d, %Y"))
 c_status.success("☁️ Connected")
