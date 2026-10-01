@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, date
 from data_manager import SheetsManager
 
-st.set_page_config(page_title="Task Manager", page_icon="📋", layout="wide")
+st.set_page_config(page_title="Manager Dashboard", page_icon="📋", layout="wide")
 
 st.markdown("""
 <style>
@@ -25,12 +25,12 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("## 🔒 Task Manager")
+    st.markdown("## 🔒 Manager Dashboard")
     with st.form("login"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.form_submit_button("Log in", type="primary"):
-            if username == "admin" and password == "admin218":
+            if username == "admin" and password == "admin":
                 st.session_state.authenticated = True
                 st.rerun()
             else:
@@ -130,30 +130,35 @@ def image_upload_widget(uploader_key: str, target_key: str):
 
 
 def files_upload_widget(uploader_key: str, target_key: str):
-    """File uploader (multi) + button that uploads to Drive and appends links into session_state[target_key]."""
+    """File uploader (multi) + label + button that uploads to Drive and appends links."""
     folder_id = st.secrets.get("drive_folder_id", "")
-    uploaded_files = st.file_uploader("Or upload files", accept_multiple_files=True, key=uploader_key, label_visibility="collapsed")
-    if uploaded_files and st.button("📤 Upload files", key=f"{uploader_key}_btn"):
-        if not folder_id:
-            st.error("drive_folder_id not configured in secrets.")
-        else:
-            new_lines = []
-            for f in uploaded_files:
-                try:
-                    link = dm().upload_file_to_drive(f.read(), f.name, f.type, folder_id)
-                    new_lines.append(f"{f.name}: {link}")
-                except Exception as e:
-                    st.error(f"❌ Failed to upload {f.name}: {e}")
-            if new_lines:
-                current = st.session_state.get(target_key, "")
-                st.session_state[target_key] = (current + "\n" + "\n".join(new_lines)).strip()
-                st.toast(f"Uploaded {len(new_lines)} file(s)!")
-                st.rerun()
+    uploaded_files = st.file_uploader("Upload files", accept_multiple_files=True, key=uploader_key, label_visibility="collapsed")
+    if uploaded_files:
+        label = st.text_input("Label for this file (optional)", key=f"{uploader_key}_label",
+                              placeholder="e.g. Temp Daily Performance Dashboard")
+        if st.button("📤 Upload", key=f"{uploader_key}_btn"):
+            if not folder_id:
+                st.error("drive_folder_id not configured in secrets.")
+            else:
+                new_lines = []
+                for f in uploaded_files:
+                    try:
+                        link = dm().upload_file_to_drive(f.read(), f.name, f.type, folder_id)
+                        clean_name = label.strip() if label.strip() else f.name.replace("_", " ").split("(")[0].strip()
+                        display_label = f"{clean_name} (Google Drive: andover_files)"
+                        new_lines.append(f"{display_label}: {link}")
+                    except Exception as e:
+                        st.error(f"❌ Failed to upload {f.name}: {e}")
+                if new_lines:
+                    current = st.session_state.get(target_key, "")
+                    st.session_state[target_key] = (current + "\n" + "\n".join(new_lines)).strip()
+                    st.toast(f"Uploaded {len(new_lines)} file(s)!")
+                    st.rerun()
 
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 📋 Task Manager")
+    st.markdown("## 📋 Manager Dashboard")
     st.success("☁️ Google Sheets connected")
     st.markdown("---")
     st.markdown("### 👥 Your Team")
@@ -187,7 +192,7 @@ with st.sidebar:
 
 
 # ── header ────────────────────────────────────────────────────────────────────
-st.markdown("# 📋 Task Manager")
+st.markdown("# 📋 Manager Dashboard")
 c0, c_status = st.columns([4, 1])
 c0.caption(date.today().strftime("%A, %B %d, %Y"))
 c_status.success("☁️ Connected")
@@ -227,22 +232,31 @@ tab_todo, tab_issues, tab_actions, tab_meetings, tab_projects, tab_scripts, tab_
 with tab_todo:
     st.markdown('<div class="section-header">TODO</div>', unsafe_allow_html=True)
 
-    # Quick-add input
-    col_in, col_btn = st.columns([5, 1])
-    new_task = col_in.text_input("Add a task", key="todo_input", placeholder="What needs doing?", label_visibility="collapsed")
-    if col_btn.button("➕ Add", use_container_width=True) and new_task.strip():
-        save(dm().append_row, "TODO", {
-            "Task": new_task.strip(), "Done": "No", "Created": str(date.today()),
-        }, sheet="TODO", success_msg=None)
+    # ── Add form ──────────────────────────────────────────────────────────────
+    form_col, _ = st.columns([5, 2])
+    with form_col, st.container(border=True):
+        st.markdown("**➕ Add a task**")
+        new_task = st.text_input("Task", key="todo_input", placeholder="What needs doing?", label_visibility="collapsed")
+        td_due_col, td_empty = st.columns([2, 3])
+        new_due = td_due_col.date_input("Due date (optional)", value=None, key="todo_due")
+        new_comments = st.text_area("Comments (optional)", key="todo_comments", height=68,
+                                    placeholder="Any extra context, links, or notes...")
+        if st.button("➕ Add", type="primary", use_container_width=True) and new_task.strip():
+            save(dm().append_row, "TODO", {
+                "Task": new_task.strip(), "Done": "No", "Created": str(date.today()),
+                "DueDate": str(new_due) if new_due else "",
+                "Comments": new_comments.strip(),
+            }, sheet="TODO", success_msg=None)
 
     st.markdown("---")
 
     df = get_data("TODO")
     if df.empty:
-        st.info("Nothing here yet — type above to add your first task.")
+        st.info("Nothing here yet — add your first task above.")
     else:
         pending = df[df["Done"] == "No"].reset_index(drop=False) if "Done" in df.columns else df.reset_index(drop=False)
-        if "Created" in pending.columns: pending = pending.sort_values("Created", ascending=False)
+        if "Created" in pending.columns:
+            pending = pending.sort_values("Created", ascending=False)
         done_df = df[df["Done"] == "Yes"].reset_index(drop=False) if "Done" in df.columns else pd.DataFrame()
 
         if pending.empty:
@@ -251,23 +265,58 @@ with tab_todo:
             for _, row in pending.iterrows():
                 orig_idx = int(row["index"])
                 with st.container(border=True):
-                    c1, c2, c3, c4 = st.columns([6, 1, 1, 1])
-                    c1.markdown(f"{row.get('Task','')} <small style='color:#94a3b8'>&nbsp;{row.get('Created','')}</small>", unsafe_allow_html=True)
+                    # Title row + action buttons
+                    c1, c2, c3, c4, c5 = st.columns([5, 1, 1, 1, 1])
+                    due_str = row.get("DueDate", "")
+                    today_str = str(date.today())
+                    due_label = ""
+                    if due_str:
+                        due_label = f" &nbsp;<small style='color:{'#ef4444' if due_str < today_str else '#94a3b8'}'>📅 {due_str}</small>"
+                    c1.markdown(
+                        f"**{row.get('Task','')}**{due_label} "
+                        f"<small style='color:#cbd5e1'>&nbsp;{row.get('Created','')}</small>",
+                        unsafe_allow_html=True
+                    )
+                    if row.get("Comments","").strip():
+                        c1.caption(row["Comments"])
+
                     if c2.button("✓", key=f"td_done_{orig_idx}", use_container_width=True, help="Mark done"):
                         dm().update_cell("TODO", orig_idx, "Done", "Yes")
                         invalidate("TODO")
                         st.rerun()
                     if c3.button("✏️", key=f"td_edit_{orig_idx}", use_container_width=True, help="Edit"):
-                        st.session_state[f"editing_todo_{orig_idx}"] = True
-                    if c4.button("🗑", key=f"td_del_{orig_idx}", use_container_width=True, help="Delete"):
+                        st.session_state[f"editing_todo_{orig_idx}"] = not st.session_state.get(f"editing_todo_{orig_idx}", False)
+                        st.rerun()
+                    # Promote to Resolution
+                    if c4.button("📋", key=f"td_promo_{orig_idx}", use_container_width=True, help="Promote to Resolution"):
+                        st.session_state[f"promote_todo_{orig_idx}"] = True
+                        st.rerun()
+                    if c5.button("🗑", key=f"td_del_{orig_idx}", use_container_width=True, help="Delete"):
                         dm().delete_row("TODO", orig_idx)
                         invalidate("TODO")
                         st.rerun()
+
+                    # Inline edit panel
                     if st.session_state.get(f"editing_todo_{orig_idx}"):
-                        new_val = st.text_input("Edit task", value=row.get("Task",""), key=f"td_val_{orig_idx}")
+                        e_task = st.text_input("Task", value=row.get("Task",""), key=f"td_val_{orig_idx}")
+                        e_due_default = None
+                        try:
+                            import datetime as _dt
+                            if row.get("DueDate",""):
+                                e_due_default = _dt.date.fromisoformat(str(row["DueDate"]))
+                        except Exception:
+                            pass
+                        e_due = st.date_input("Due date", value=e_due_default, key=f"td_edue_{orig_idx}")
+                        e_comments = st.text_area("Comments", value=row.get("Comments",""), key=f"td_ecmt_{orig_idx}", height=68)
                         s1, s2 = st.columns(2)
                         if s1.button("💾 Save", key=f"td_sv_{orig_idx}", use_container_width=True):
-                            dm().update_cell("TODO", orig_idx, "Task", new_val.strip())
+                            if e_task.strip() != row.get("Task",""):
+                                dm().update_cell("TODO", orig_idx, "Task", e_task.strip())
+                            new_due_str = str(e_due) if e_due else ""
+                            if new_due_str != str(row.get("DueDate","")):
+                                dm().update_cell("TODO", orig_idx, "DueDate", new_due_str)
+                            if e_comments.strip() != str(row.get("Comments","")):
+                                dm().update_cell("TODO", orig_idx, "Comments", e_comments.strip())
                             st.session_state[f"editing_todo_{orig_idx}"] = False
                             invalidate("TODO")
                             st.rerun()
@@ -275,13 +324,53 @@ with tab_todo:
                             st.session_state[f"editing_todo_{orig_idx}"] = False
                             st.rerun()
 
+                    # Promote to Resolution dialog
+                    if st.session_state.get(f"promote_todo_{orig_idx}"):
+                        st.markdown("**📋 Promote to Resolution**")
+                        pr_title  = st.text_input("Resolution title", value=row.get("Task",""), key=f"pr_t_{orig_idx}")
+                        pr_prob   = st.text_area("Problem description", value=row.get("Comments",""), key=f"pr_p_{orig_idx}", height=80,
+                                                  placeholder="What was the problem?")
+                        pr_steps  = st.text_area("What was tried", key=f"pr_s_{orig_idx}", height=80,
+                                                  placeholder="Steps taken / things attempted...")
+                        pr_sol    = st.text_area("What fixed it", key=f"pr_sol_{orig_idx}", height=80,
+                                                  placeholder="The resolution or answer")
+                        pr_tags   = st.text_input("Tags", key=f"pr_tags_{orig_idx}", placeholder="e.g. data, pipeline")
+                        pr_mark_done = st.checkbox("Also mark this TODO as done", value=True, key=f"pr_done_{orig_idx}")
+                        pb1, pb2 = st.columns(2)
+                        if pb1.button("✅ Create Resolution", key=f"pr_go_{orig_idx}", use_container_width=True, type="primary"):
+                            dm().append_row("Resolutions", {
+                                "Title": pr_title.strip(),
+                                "Problem": pr_prob.strip(),
+                                "Steps": pr_steps.strip(),
+                                "Solution": pr_sol.strip(),
+                                "Tags": pr_tags.strip(),
+                                "Created": str(date.today()),
+                            })
+                            invalidate("Resolutions")
+                            if pr_mark_done:
+                                dm().update_cell("TODO", orig_idx, "Done", "Yes")
+                                invalidate("TODO")
+                            st.session_state[f"promote_todo_{orig_idx}"] = False
+                            st.toast("Resolution created!")
+                            st.rerun()
+                        if pb2.button("Cancel", key=f"pr_cancel_{orig_idx}", use_container_width=True):
+                            st.session_state[f"promote_todo_{orig_idx}"] = False
+                            st.rerun()
+
+        # Completed items — with Revive button
         if not done_df.empty:
             with st.expander(f"✅ {len(done_df)} completed"):
                 for _, row in done_df.iterrows():
                     orig_idx = int(row["index"])
-                    c1, c2 = st.columns([7, 1])
-                    c1.markdown(f"~~{row.get('Task','')}~~")
-                    if c2.button("🗑", key=f"td_ddel_{orig_idx}", use_container_width=True):
+                    c1, c2, c3 = st.columns([6, 1, 1])
+                    c1.markdown(f"~~{row.get('Task','')}~~  <small style='color:#94a3b8'>{row.get('Created','')}</small>", unsafe_allow_html=True)
+                    if row.get("Comments","").strip():
+                        c1.caption(row["Comments"])
+                    if c2.button("↩", key=f"td_revive_{orig_idx}", use_container_width=True, help="Move back to active"):
+                        dm().update_cell("TODO", orig_idx, "Done", "No")
+                        invalidate("TODO")
+                        st.rerun()
+                    if c3.button("🗑", key=f"td_ddel_{orig_idx}", use_container_width=True):
                         dm().delete_row("TODO", orig_idx)
                         invalidate("TODO")
                         st.rerun()
