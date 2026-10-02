@@ -30,7 +30,7 @@ if not st.session_state.authenticated:
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.form_submit_button("Log in", type="primary"):
-            if username == "admin" and password == "admin":
+            if username == "admin" and password == "admin218":
                 st.session_state.authenticated = True
                 st.rerun()
             else:
