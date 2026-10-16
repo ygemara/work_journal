@@ -221,9 +221,10 @@ tabs = st.tabs([
     "🔬 Scripts",
     "📋 Procedures",
     "✔️ Resolutions",
+    "📊 Data Pulls",
     "📝 Notes",
 ])
-tab_todo, tab_issues, tab_actions, tab_meetings, tab_projects, tab_scripts, tab_procedures, tab_resolutions, tab_notes = tabs
+tab_todo, tab_issues, tab_actions, tab_meetings, tab_projects, tab_scripts, tab_procedures, tab_resolutions, tab_datapulls, tab_notes = tabs
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1226,6 +1227,179 @@ with tab_resolutions:
                     invalidate("Resolutions")
                     st.toast("Deleted!")
                     st.rerun()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DATA PULLS
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_datapulls:
+    st.markdown('<div class="section-header">Data Pulls</div>', unsafe_allow_html=True)
+    st.caption("Log one-off data requests: where the numbers came from, the logic, and the traps, so you can answer \"how did we get that?\" or rerun it later.")
+
+    form_col, _ = st.columns([5, 2])
+    with form_col, st.container(border=True):
+        st.markdown("**➕ Log a data pull**")
+        d1c1, d1c2 = st.columns(2)
+        dp_title     = d1c1.text_input("Title", key="dp_title", placeholder="e.g. Trash expense by asset, Aug 2024 to Jul 2026")
+        dp_requester = d1c2.text_input("Requester", key="dp_requester", placeholder="Who asked")
+        dp_question  = st.text_area("Question", key="dp_question", height=80,
+                                    placeholder="The ask in plain words")
+        dp_sources   = st.text_area("Sources (tables, one per line)", key="dp_sources", height=100,
+                                    placeholder="storedge_prod.datamodels.monthlyfinancials_detail\nbusiness_central.financials.gl_entries")
+        dp_logic     = st.text_area("Logic (filters and joins that matter)", key="dp_logic", height=100)
+        dp_gotchas   = st.text_area("Gotchas (traps found, one per line)", key="dp_gotchas", height=100)
+        dp_result    = st.text_area("Result (headline numbers)", key="dp_result", height=80)
+        dp_sql       = st.text_area("SQL (final query or a link to it)", key="dp_sql", height=150)
+        files_upload_widget("dp_files_upl", "dp_output")
+        dp_output    = st.text_area("Output (files / links, one per line)", key="dp_output", height=80)
+        dp_follow    = st.text_area("Follow-ups (open threads, blank if none)", key="dp_follow", height=80)
+        dp_tags      = st.text_input("Tags", key="dp_tags", placeholder="e.g. GL, CREST, BC")
+        if st.button("Save Data Pull", type="primary", use_container_width=True):
+            if not dp_title.strip():
+                st.warning("Title required.")
+            else:
+                save(dm().append_row, "DataPulls", {
+                    "Title": dp_title.strip(),
+                    "Requester": dp_requester.strip(),
+                    "Question": dp_question.strip(),
+                    "Sources": dp_sources.strip(),
+                    "Logic": dp_logic.strip(),
+                    "Gotchas": dp_gotchas.strip(),
+                    "Result": dp_result.strip(),
+                    "Output": dp_output.strip(),
+                    "SQL": dp_sql.strip(),
+                    "FollowUps": dp_follow.strip(),
+                    "Tags": dp_tags.strip(),
+                    "Created": str(date.today()),
+                }, sheet="DataPulls", success_msg="Data pull saved!")
+
+    st.markdown("---")
+
+    df = get_data("DataPulls")
+    if df.empty:
+        st.info("No data pulls yet. Next time you answer a one-off data question, log it here.")
+    else:
+        view_mode = st.radio("View", ["Pulls", "Gotchas rollup"], horizontal=True, key="dp_view",
+                             label_visibility="collapsed")
+
+        if view_mode == "Gotchas rollup":
+            # One row per gotcha line, with the pull it came from
+            rows = []
+            for _, r in df.iterrows():
+                for line in str(r.get("Gotchas", "")).split("\n"):
+                    line = line.strip().lstrip("-• ").strip()
+                    if line:
+                        rows.append({"Gotcha": line, "Pull": r.get("Title", ""),
+                                     "Tags": r.get("Tags", ""), "Created": r.get("Created", "")})
+            g = pd.DataFrame(rows)
+            gsearch = st.text_input("🔍 Search gotchas", key="dp_gsearch")
+            if not g.empty and gsearch:
+                g = g[g.apply(lambda r: gsearch.lower() in str(r).lower(), axis=1)]
+            if g.empty:
+                st.info("No gotchas logged yet.")
+            else:
+                st.dataframe(g.sort_values("Created", ascending=False), use_container_width=True, hide_index=True)
+        else:
+            sc1, sc2 = st.columns([3, 1])
+            search = sc1.text_input("🔍 Search (titles, tables, gotchas, SQL...)", key="dp_search")
+            open_only = sc2.checkbox("Open follow-ups only", key="dp_open")
+            view = df.copy().reset_index(drop=False)
+            if "Created" in view.columns: view = view.sort_values("Created", ascending=False)
+            if search: view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
+            if open_only and "FollowUps" in view.columns:
+                view = view[view["FollowUps"].astype(str).str.strip() != ""]
+
+            edit_df = add_delete_col(view[[c for c in ["index","Title","Requester","Tags","Created"] if c in view.columns]])
+            edited = st.data_editor(edit_df, column_config={
+                "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
+                "index":  st.column_config.Column("Row", disabled=True, width="small"),
+            }, use_container_width=True, hide_index=True, key="dp_editor")
+
+            if st.button("🗑 Delete selected", key="dp_del", use_container_width=True):
+                to_del = edited[edited["Delete"] == True]["index"].tolist()
+                if not to_del:
+                    st.info("Tick rows first.")
+                else:
+                    for idx in sorted(to_del, reverse=True):
+                        dm().delete_row("DataPulls", int(idx))
+                    invalidate("DataPulls")
+                    st.rerun()
+
+            st.markdown("---")
+            for _, row in view.iterrows():
+                orig_idx = int(row["index"])
+                req = f"  ·  {row.get('Requester','')}" if row.get("Requester") else ""
+                flag = "  ·  🔁 open follow-ups" if str(row.get("FollowUps","")).strip() else ""
+                with st.expander(f"**{row.get('Title','')}**{req}  ·  {row.get('Created','')}{flag}"):
+                    if row.get("Tags"):
+                        st.markdown(" ".join([f"`{t.strip()}`" for t in str(row["Tags"]).split(",") if t.strip()]))
+
+                    if row.get("Question"):
+                        st.markdown("**❓ Question:**")
+                        st.markdown(row["Question"])
+                    if row.get("Result"):
+                        st.markdown("**📊 Result:**")
+                        st.success(row["Result"])
+                    if row.get("Sources"):
+                        st.markdown("**🗄️ Sources:**")
+                        for line in str(row["Sources"]).split("\n"):
+                            if line.strip(): st.markdown(f"- `{line.strip()}`")
+                    if row.get("Logic"):
+                        st.markdown("**🧮 Logic:**")
+                        st.markdown(row["Logic"])
+                    if row.get("Gotchas"):
+                        st.markdown("**⚠️ Gotchas:**")
+                        st.warning(row["Gotchas"])
+                    if row.get("FollowUps"):
+                        st.markdown("**🔁 Follow-ups:**")
+                        st.info(row["FollowUps"])
+                    if row.get("Output"):
+                        st.markdown("**📎 Output:**")
+                        for line in str(row["Output"]).split("\n"):
+                            line = line.strip()
+                            if not line: continue
+                            if ":" in line and "http" in line.split(":",1)[1]:
+                                label, url = line.split(":", 1)
+                                st.markdown(f"- [{label.strip()}]({url.strip()})")
+                            elif line.startswith("http"):
+                                st.markdown(f"- [{line}]({line})")
+                            else:
+                                st.markdown(f"- {line}")
+                    if row.get("SQL"):
+                        with st.expander("🔄 Rerun: SQL"):
+                            st.code(row["SQL"], language="sql")
+
+                    st.markdown("---")
+                    st.markdown("### ✏️ Edit")
+                    e1, e2 = st.columns(2)
+                    e_title  = e1.text_input("Title",     value=row.get("Title",""),     key=f"dp_et_{orig_idx}")
+                    e_req    = e2.text_input("Requester", value=row.get("Requester",""), key=f"dp_er_{orig_idx}")
+                    e_tags   = st.text_input("Tags",      value=row.get("Tags",""),      key=f"dp_etg_{orig_idx}")
+                    e_q      = st.text_area("Question",   value=row.get("Question",""),  key=f"dp_eq_{orig_idx}", height=80)
+                    e_src    = st.text_area("Sources",    value=row.get("Sources",""),   key=f"dp_esrc_{orig_idx}", height=100)
+                    e_logic  = st.text_area("Logic",      value=row.get("Logic",""),     key=f"dp_el_{orig_idx}", height=100)
+                    e_got    = st.text_area("Gotchas",    value=row.get("Gotchas",""),   key=f"dp_eg_{orig_idx}", height=100)
+                    e_res    = st.text_area("Result",     value=row.get("Result",""),    key=f"dp_eres_{orig_idx}", height=80)
+                    e_sql    = st.text_area("SQL",        value=row.get("SQL",""),       key=f"dp_esql_{orig_idx}", height=150)
+                    files_upload_widget(f"dp_eo_upl_{orig_idx}", f"dp_eo_{orig_idx}")
+                    e_out    = st.text_area("Output",     value=row.get("Output",""),    key=f"dp_eo_{orig_idx}", height=80)
+                    e_fu     = st.text_area("Follow-ups", value=row.get("FollowUps",""), key=f"dp_efu_{orig_idx}", height=80)
+
+                    b1, b2 = st.columns(2)
+                    if b1.button("💾 Save", key=f"dp_sv_{orig_idx}", use_container_width=True):
+                        for col, val in [("Title",e_title),("Requester",e_req),("Tags",e_tags),("Question",e_q),
+                                         ("Sources",e_src),("Logic",e_logic),("Gotchas",e_got),("Result",e_res),
+                                         ("SQL",e_sql),("Output",e_out),("FollowUps",e_fu)]:
+                            if val != row.get(col,""):
+                                dm().update_cell("DataPulls", orig_idx, col, val)
+                        invalidate("DataPulls")
+                        st.toast("Saved!")
+                        st.rerun()
+                    if b2.button("🗑 Delete", key=f"dp_del_{orig_idx}", use_container_width=True):
+                        dm().delete_row("DataPulls", orig_idx)
+                        invalidate("DataPulls")
+                        st.toast("Deleted!")
+                        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
