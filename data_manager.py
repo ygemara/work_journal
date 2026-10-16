@@ -14,6 +14,7 @@ SCHEMAS: dict[str, list[str]] = {
     "Projects":       ["Title", "Status", "Description", "Approach", "Results", "NextSteps", "Files", "Tags", "Created"],
     "TODO":           ["Task", "Done", "Created", "DueDate", "Comments"],
     "Resolutions":    ["Title", "Problem", "Steps", "Solution", "Files", "Tags", "Created"],
+    "DataPulls": ["Title", "Requester", "Question", "Sources", "Logic", "Gotchas", "Result", "Output", "SQL", "FollowUps", "Tags", "Created"],
     "DataDict":    ["OutputTable", "Column", "SourceTable", "SourceColumn", "Script", "Transform", "Notes", "Created"],
     "Reference":   ["Title", "Category", "Content", "Explanation", "Tags", "Created"],
     "Agenda":      ["Person", "Topic", "Category", "AddedBy", "Discussed", "Created"],
