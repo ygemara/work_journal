@@ -53,12 +53,6 @@ except Exception as e:
     st.error(f"❌ Could not connect to Google Sheets: {e}")
     st.stop()
 
-if "direct_reports" not in st.session_state:
-    try:
-        st.session_state.direct_reports = _sm.get_direct_reports()
-    except Exception:
-        st.session_state.direct_reports = []
-
 
 def dm() -> SheetsManager:
     return get_manager()
@@ -158,41 +152,19 @@ def files_upload_widget(uploader_key: str, target_key: str):
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 📋 Manager")
+    st.markdown("## 📋 Dashboard")
     st.success("☁️ Google Sheets connected")
-    st.markdown("---")
-    st.markdown("### 👥 Your Team")
-
-    new_name = st.text_input("Add person", placeholder="Jane Smith", label_visibility="collapsed")
-    if st.button("➕ Add", use_container_width=True) and new_name.strip():
-        save(dm().add_direct_report, new_name.strip(), sheet=None, success_msg=None)
-        st.session_state.direct_reports = dm().get_direct_reports()
-        st.rerun()
-
-    reports = st.session_state.direct_reports
-    if reports:
-        for r in reports:
-            st.markdown(f"• {r}")
-        remove = st.selectbox("Remove", ["—"] + reports, label_visibility="collapsed")
-        if st.button("🗑 Remove", use_container_width=True) and remove != "—":
-            save(dm().remove_direct_report, remove, sheet=None, success_msg=None)
-            st.session_state.direct_reports = dm().get_direct_reports()
-            st.rerun()
-    else:
-        st.caption("No team members yet.")
-
     st.markdown("---")
     if st.button("🔄 Refresh data", use_container_width=True):
         for k in list(st.session_state.keys()):
             if k.startswith("_data_"):
                 del st.session_state[k]
-        st.session_state.direct_reports = dm().get_direct_reports()
         st.rerun()
     st.caption(f"Refreshed: {datetime.now().strftime('%H:%M')}")
 
 
 # ── header ────────────────────────────────────────────────────────────────────
-st.markdown("# 📋 Manager")
+st.markdown("# 📋 Dashboard")
 c0, c_status = st.columns([4, 1])
 c0.caption(date.today().strftime("%A, %B %d, %Y"))
 c_status.success("☁️ Connected")
@@ -521,7 +493,7 @@ with tab_actions:
     if df.empty:
         st.info("No action items yet.")
     else:
-        f_owner = st.selectbox("Filter by owner", ["Everyone"] + ["Me"] + st.session_state.direct_reports, key="ac_filt")
+        f_owner = st.selectbox("Filter by owner", ["Everyone"], key="ac_filt")
         today_str = str(date.today())
         view = df.copy().reset_index(drop=False)
         if "Status" in view.columns:
