@@ -190,12 +190,13 @@ tabs = st.tabs([
     "✅ Action Items",
     "🗒 Meetings",
     "🏗️ Projects",
-    "🔬 Scripts",
+    "🔍 Data Pulls",
+    "🗄️ Data Issues",
     "📋 Procedures",
     "✔️ Resolutions",
     "📝 Notes",
 ])
-tab_todo, tab_issues, tab_actions, tab_meetings, tab_projects, tab_scripts, tab_procedures, tab_resolutions, tab_notes = tabs
+tab_todo, tab_issues, tab_actions, tab_meetings, tab_projects, tab_datapulls, tab_dataissues, tab_procedures, tab_resolutions, tab_notes = tabs
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -813,159 +814,140 @@ with tab_projects:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SCRIPTS — pipeline / schedule tracker
+# DATA PULLS
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab_scripts:
-    st.markdown('<div class="section-header">Script & Pipeline Tracker</div>', unsafe_allow_html=True)
-    st.caption("Track scheduled scripts — what they run, what notebooks they call, what tables they write to, and how often.")
+with tab_datapulls:
+    st.markdown('<div class="section-header">Data Pulls</div>', unsafe_allow_html=True)
+    st.caption("Log ad-hoc data pulls — the question asked, sources used, logic, gotchas, result, and the SQL to reproduce it.")
 
     form_col, _ = st.columns([5, 2])
     with form_col, st.container(border=True):
-        st.markdown("**➕ Add a script / pipeline**")
-        r1c1, r1c2, r1c3 = st.columns(3)
-        sc_name    = r1c1.text_input("Script name", key="sc_name", placeholder="e.g. Daily Sales Refresh")
-        sc_sched   = r1c2.selectbox("Schedule", ["Daily","Weekly","Monthly","Ad hoc","Continuous","Other"], key="sc_sched")
-        sc_owner   = r1c3.text_input("Owner", key="sc_owner", placeholder="e.g. Data team")
-        r2c1, r2c2 = st.columns(2)
-        sc_status  = r2c1.selectbox("Status", ["Active","Paused","Broken","Under Review","Deprecated"], key="sc_status")
-        sc_lastrun = r2c2.text_input("Last run", key="sc_lastrun", placeholder="e.g. 2026-04-27 06:00")
-        sc_desc    = st.text_area("What does it do?", key="sc_desc", height=120,
-                                  placeholder="Brief description of purpose and logic")
-        nb1, nb2 = st.columns(2)
-        sc_nbs     = nb1.text_area("Notebooks / child scripts", key="sc_nbs", height=120,
-                                  placeholder="List the notebooks or scripts it calls, one per line")
-        sc_tables  = nb2.text_area("Output tables / destinations", key="sc_tables", height=120,
-                                  placeholder="List tables or systems it writes to, one per line")
-        sc_notes   = st.text_area("Notes / known issues", key="sc_notes", height=120,
-                                  placeholder="Quirks, known issues, dependencies...")
-        sc_lang    = st.selectbox("Code language", ["SQL","Python","Shell / Bash","DAX","Other"], key="sc_lang_sel")
-        sc_code    = st.text_area("Code (optional)", key="sc_code", height=250,
-                                  placeholder="Paste the main script or key code blocks here...")
-        if st.button("Save Script", type="primary", use_container_width=True):
-            if not sc_name.strip():
-                st.warning("Name required.")
+        st.markdown("**➕ Log a data pull**")
+        dp_title     = st.text_input("Title", key="dp_title", placeholder="e.g. Trash expense by asset, Aug 2024–Jul 2026")
+        dp_requester = st.text_input("Requester", key="dp_requester", placeholder="Who asked for this?")
+        dp_question  = st.text_area("Question / request", key="dp_question", height=80,
+                                    placeholder="What exactly was being asked?")
+        dp_sources   = st.text_area("Sources / tables used", key="dp_sources", height=80,
+                                    placeholder="e.g. storedge_prod.datamodels.monthlyfinancials_detail; dim.assets")
+        dp_logic     = st.text_area("Logic", key="dp_logic", height=120,
+                                    placeholder="How was the data assembled? Filters, joins, aggregations...")
+        dp_gotchas   = st.text_area("Gotchas / caveats", key="dp_gotchas", height=80,
+                                    placeholder="Edge cases, exclusions, known issues encountered...")
+        dp_result    = st.text_area("Result / answer", key="dp_result", height=80,
+                                    placeholder="e.g. $836K vs $610K (-27%); comparable 151 assets...")
+        dp_output    = st.text_input("Output file", key="dp_output", placeholder="e.g. Trash_Expense_by_Asset.xlsx")
+        dp_sql       = st.text_area("SQL / code", key="dp_sql", height=250,
+                                    placeholder="Paste the query or script used to produce the result...")
+        dp_followups = st.text_area("Follow-ups", key="dp_followups", height=68,
+                                    placeholder="Open questions or next steps from this pull...")
+        dp_tags      = st.text_input("Tags", key="dp_tags", placeholder="e.g. GL, trash, CREST, Heitman")
+        if st.button("Save Data Pull", type="primary", use_container_width=True):
+            if not dp_title.strip():
+                st.warning("Title required.")
             else:
-                save(dm().append_row, "Scripts", {
-                    "Name": sc_name.strip(), "Schedule": sc_sched,
-                    "Description": sc_desc.strip(), "Notebooks": sc_nbs.strip(),
-                    "OutputTables": sc_tables.strip(), "Owner": sc_owner.strip(),
-                    "Status": sc_status, "LastRun": sc_lastrun.strip(),
-                    "Notes": sc_notes.strip(),
-                    "Code": sc_code.strip(),
-                    "Language": sc_lang,
-                    "Created": str(date.today()),
-                }, sheet="Scripts", success_msg="Script saved!")
+                save(dm().append_row, "DataPulls", {
+                    "Title": dp_title.strip(), "Requester": dp_requester.strip(),
+                    "Question": dp_question.strip(), "Sources": dp_sources.strip(),
+                    "Logic": dp_logic.strip(), "Gotchas": dp_gotchas.strip(),
+                    "Result": dp_result.strip(), "Output": dp_output.strip(),
+                    "SQL": dp_sql.strip(), "FollowUps": dp_followups.strip(),
+                    "Tags": dp_tags.strip(), "Created": str(date.today()),
+                }, sheet="DataPulls", success_msg="Saved!")
 
     st.markdown("---")
 
-    df = get_data("Scripts")
+    df = get_data("DataPulls")
     if df.empty:
-        st.info("No scripts logged yet.")
+        st.info("No data pulls logged yet.")
     else:
-        sc1, sc2 = st.columns([2, 1])
-        search   = sc1.text_input("🔍 Search", key="sc_search")
-        all_st   = ["All"] + sorted(df["Status"].dropna().unique().tolist()) if "Status" in df.columns else ["All"]
-        f_status = sc2.selectbox("Status", all_st, key="sc_status_filter")
-
+        search = st.text_input("🔍 Search", key="dp_search")
         view = df.copy().reset_index(drop=False)
         if "Created" in view.columns: view = view.sort_values("Created", ascending=False)
         if search: view = view[view.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
-        if f_status != "All" and "Status" in view.columns: view = view[view["Status"] == f_status]
 
-        status_icon = {"Active":"🟢","Paused":"🟡","Broken":"🔴","Under Review":"🔍","Deprecated":"⚫"}
-
-        edit_df = add_delete_col(view[[c for c in ["index","Name","Schedule","Owner","Status","LastRun"] if c in view.columns]])
+        edit_df = add_delete_col(view[[c for c in ["index","Title","Requester","Tags","Created"] if c in view.columns]])
         edited = st.data_editor(edit_df, column_config={
             "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
             "index":  st.column_config.Column("Row", disabled=True, width="small"),
-            "Status": st.column_config.SelectboxColumn("Status", options=["Active","Paused","Broken","Under Review","Deprecated"]),
-        }, use_container_width=True, hide_index=True, key="scripts_editor")
+        }, use_container_width=True, hide_index=True, key="dp_editor")
 
-        bc1, bc2 = st.columns(2)
-        if bc1.button("💾 Save status", key="sc_save", use_container_width=True):
-            for _, row in edited.iterrows():
-                orig_idx = int(row["index"])
-                if row.get("Status") != df.loc[orig_idx].get("Status"):
-                    dm().update_cell("Scripts", orig_idx, "Status", row["Status"])
-            invalidate("Scripts")
-            st.toast("Saved!")
-            st.rerun()
-        if bc2.button("🗑 Delete selected", key="sc_del", use_container_width=True):
+        if st.button("🗑 Delete selected", key="dp_del", use_container_width=True):
             to_del = edited[edited["Delete"] == True]["index"].tolist()
             if not to_del:
                 st.info("Tick rows first.")
             else:
                 for idx in sorted(to_del, reverse=True):
-                    dm().delete_row("Scripts", int(idx))
-                invalidate("Scripts")
+                    dm().delete_row("DataPulls", int(idx))
+                invalidate("DataPulls")
                 st.rerun()
 
         st.markdown("---")
         for _, row in view.iterrows():
             orig_idx = int(row["index"])
-            icon = status_icon.get(row.get("Status",""), "📄")
-            with st.expander(f"{icon} **{row.get('Name','')}**  ·  {row.get('Schedule','')}  ·  {row.get('Status','')}"):
+            with st.expander(f"**{row.get('Title','')}**  ·  {row.get('Created','')}  ·  {row.get('Requester','')}"):
+                if row.get("Tags"): st.caption(f"🏷 {row['Tags']}")
 
-                d1, d2 = st.columns(2)
-                d1.markdown(f"**Owner:** {row.get('Owner','—')}")
-                d1.markdown(f"**Last run:** {row.get('LastRun','—')}")
-                d2.markdown(f"**Schedule:** {row.get('Schedule','—')}")
+                if row.get("Question"):
+                    st.markdown("**Question**")
+                    st.markdown(row["Question"])
 
-                if row.get("Description"):
-                    st.markdown("**What it does:**")
-                    st.markdown(row["Description"])
+                c1, c2 = st.columns(2)
+                if row.get("Sources"):
+                    c1.markdown("**Sources**")
+                    c1.markdown(row["Sources"])
+                if row.get("Result"):
+                    c2.markdown("**Result**")
+                    c2.info(row["Result"])
 
-                nb1, nb2 = st.columns(2)
-                if row.get("Notebooks"):
-                    nb1.markdown("**📓 Notebooks / child scripts:**")
-                    nb1.text(row["Notebooks"])
-                if row.get("OutputTables"):
-                    nb2.markdown("**📊 Output tables / destinations:**")
-                    nb2.text(row["OutputTables"])
+                if row.get("Logic"):
+                    st.markdown("**Logic**")
+                    st.markdown(row["Logic"])
 
-                if row.get("Notes"):
-                    st.markdown("**⚠️ Notes / known issues:**")
-                    st.warning(row["Notes"])
+                if row.get("Gotchas"):
+                    st.markdown("**⚠️ Gotchas**")
+                    st.warning(row["Gotchas"])
 
-                if row.get("Code"):
-                    st.markdown("**💻 Code:**")
-                    code_text = row["Code"]
-                    lang_map = {"SQL":"sql","Python":"python","Shell / Bash":"bash","DAX":"text","Other":"text"}
-                    lang = lang_map.get(row.get("Language",""), "sql" if "select " in code_text.lower() else "python" if "import " in code_text else "text")
-                    st.code(code_text, language=lang)
+                if row.get("Output"):
+                    st.markdown(f"**Output file:** `{row['Output']}`")
+
+                if row.get("FollowUps"):
+                    st.markdown("**Follow-ups**")
+                    st.markdown(row["FollowUps"])
+
+                if row.get("SQL"):
+                    st.markdown("**SQL / code**")
+                    sql_text = row["SQL"]
+                    lang = "python" if "import " in sql_text else "sql"
+                    st.code(sql_text, language=lang)
 
                 st.markdown("---")
-                st.markdown("### ✏️ Edit this script")
-                e_name    = st.text_input("Name",       value=row.get("Name",""),        key=f"sc_en_{orig_idx}")
-                e_sched   = st.selectbox("Schedule",    ["Daily","Weekly","Monthly","Ad hoc","Continuous","Other"],
-                                         index=["Daily","Weekly","Monthly","Ad hoc","Continuous","Other"].index(row.get("Schedule","Ad hoc")) if row.get("Schedule") in ["Daily","Weekly","Monthly","Ad hoc","Continuous","Other"] else 0,
-                                         key=f"sc_esc_{orig_idx}")
-                e_owner   = st.text_input("Owner",      value=row.get("Owner",""),       key=f"sc_eo_{orig_idx}")
-                e_lastrun = st.text_input("Last run",   value=row.get("LastRun",""),     key=f"sc_elr_{orig_idx}")
-                e_desc    = st.text_area("Description", value=row.get("Description",""), key=f"sc_ed_{orig_idx}", height=120)
-                e_nbs     = st.text_area("Notebooks",   value=row.get("Notebooks",""),   key=f"sc_enb_{orig_idx}", height=120)
-                e_tables  = st.text_area("Output tables", value=row.get("OutputTables",""), key=f"sc_et_{orig_idx}", height=120)
-                e_notes   = st.text_area("Notes",       value=row.get("Notes",""),       key=f"sc_eno_{orig_idx}", height=120)
-                e_lang_opts = ["SQL","Python","Shell / Bash","DAX","Other"]
-                e_lang    = st.selectbox("Language", e_lang_opts,
-                                        index=e_lang_opts.index(row.get("Language","SQL")) if row.get("Language") in e_lang_opts else 0,
-                                        key=f"sc_elang_{orig_idx}")
-                e_code    = st.text_area("Code",        value=row.get("Code",""),        key=f"sc_eco_{orig_idx}", height=250)
+                st.markdown("### ✏️ Edit")
+                e_title     = st.text_input("Title",      value=row.get("Title",""),     key=f"dp_et_{orig_idx}")
+                e_requester = st.text_input("Requester",  value=row.get("Requester",""), key=f"dp_er_{orig_idx}")
+                e_question  = st.text_area("Question",    value=row.get("Question",""),  key=f"dp_eq_{orig_idx}", height=80)
+                e_sources   = st.text_area("Sources",     value=row.get("Sources",""),   key=f"dp_es_{orig_idx}", height=80)
+                e_logic     = st.text_area("Logic",       value=row.get("Logic",""),     key=f"dp_el_{orig_idx}", height=120)
+                e_gotchas   = st.text_area("Gotchas",     value=row.get("Gotchas",""),   key=f"dp_eg_{orig_idx}", height=80)
+                e_result    = st.text_area("Result",      value=row.get("Result",""),    key=f"dp_eres_{orig_idx}", height=80)
+                e_output    = st.text_input("Output file",value=row.get("Output",""),    key=f"dp_eo_{orig_idx}")
+                e_sql       = st.text_area("SQL / code",  value=row.get("SQL",""),       key=f"dp_esql_{orig_idx}", height=250)
+                e_followups = st.text_area("Follow-ups",  value=row.get("FollowUps",""), key=f"dp_efu_{orig_idx}", height=68)
+                e_tags      = st.text_input("Tags",       value=row.get("Tags",""),      key=f"dp_etg_{orig_idx}")
 
-                scb1, scb2 = st.columns(2)
-                if scb1.button("💾 Save changes", key=f"sc_sv_{orig_idx}", use_container_width=True):
-                    for col, val in [("Name",e_name),("Schedule",e_sched),("Owner",e_owner),
-                                     ("LastRun",e_lastrun),("Description",e_desc),
-                                     ("Notebooks",e_nbs),("OutputTables",e_tables),("Notes",e_notes),
-                                     ("Language",e_lang),("Code",e_code)]:
+                dpb1, dpb2 = st.columns(2)
+                if dpb1.button("💾 Save changes", key=f"dp_sv_{orig_idx}", use_container_width=True):
+                    for col, val in [("Title",e_title),("Requester",e_requester),("Question",e_question),
+                                     ("Sources",e_sources),("Logic",e_logic),("Gotchas",e_gotchas),
+                                     ("Result",e_result),("Output",e_output),("SQL",e_sql),
+                                     ("FollowUps",e_followups),("Tags",e_tags)]:
                         if val != row.get(col,""):
-                            dm().update_cell("Scripts", orig_idx, col, val)
-                    invalidate("Scripts")
+                            dm().update_cell("DataPulls", orig_idx, col, val)
+                    invalidate("DataPulls")
                     st.toast("Saved!")
                     st.rerun()
-                if scb2.button("🗑 Delete", key=f"sc_del_{orig_idx}", use_container_width=True):
-                    dm().delete_row("Scripts", orig_idx)
-                    invalidate("Scripts")
+                if dpb2.button("🗑 Delete", key=f"dp_del_{orig_idx}", use_container_width=True):
+                    dm().delete_row("DataPulls", orig_idx)
+                    invalidate("DataPulls")
                     st.toast("Deleted!")
                     st.rerun()
 
@@ -1196,6 +1178,136 @@ with tab_resolutions:
                 if rb2.button("🗑 Delete", key=f"res_del_{orig_idx}", use_container_width=True):
                     dm().delete_row("Resolutions", orig_idx)
                     invalidate("Resolutions")
+                    st.toast("Deleted!")
+                    st.rerun()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DATA ISSUES — metric / definition tracker
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_dataissues:
+    st.markdown('<div class="section-header">Data Issues</div>', unsafe_allow_html=True)
+    st.caption("Track metrics or fields that are defined differently across sources, or have known quirks that affect reporting.")
+
+    form_col, _ = st.columns([5, 2])
+    with form_col, st.container(border=True):
+        st.markdown("**➕ Log a data issue**")
+        di_metric  = st.text_input("Metric / field", key="di_metric", placeholder="e.g. Occupied Units, Rent Roll, Effective Rent")
+        di_sources = st.text_input("Sources / tables", key="di_sources", placeholder="e.g. StorEdge vs CREST pre-recap; dim.assets vs monthlyfinancials_detail")
+        di_issue   = st.text_area("Issue / discrepancy", key="di_issue", height=100,
+                                  placeholder="What's different or confusing about how this metric is defined or calculated?")
+        di_impact  = st.text_area("Impact", key="di_impact", height=80,
+                                  placeholder="How does this affect reports, comparisons, or decisions?")
+        di_resolution = st.text_area("Resolution / how to handle", key="di_resolution", height=80,
+                                     placeholder="Which definition to use and when, or how to reconcile...")
+        di_status  = st.selectbox("Status", ["Open", "Resolved", "Known quirk"], key="di_status")
+        di_tags    = st.text_input("Tags", key="di_tags", placeholder="e.g. GL, occupancy, CREST, rent roll")
+        if st.button("Save Data Issue", type="primary", use_container_width=True):
+            if not di_metric.strip():
+                st.warning("Metric / field name required.")
+            else:
+                save(dm().append_row, "DataIssues", {
+                    "Metric": di_metric.strip(), "Sources": di_sources.strip(),
+                    "Issue": di_issue.strip(), "Impact": di_impact.strip(),
+                    "Resolution": di_resolution.strip(), "Status": di_status,
+                    "Tags": di_tags.strip(), "Created": str(date.today()),
+                }, sheet="DataIssues", success_msg="Saved!")
+
+    st.markdown("---")
+
+    df = get_data("DataIssues")
+    if df.empty:
+        st.info("No data issues logged yet.")
+    else:
+        di_c1, di_c2 = st.columns([3, 1])
+        di_search  = di_c1.text_input("🔍 Search", key="di_search")
+        all_st     = ["All"] + sorted(df["Status"].dropna().unique().tolist()) if "Status" in df.columns else ["All"]
+        di_f_status = di_c2.selectbox("Status", all_st, key="di_status_filter")
+
+        view = df.copy().reset_index(drop=False)
+        if "Created" in view.columns:
+            view = view.sort_values("Created", ascending=False)
+        if di_search:
+            view = view[view.apply(lambda r: di_search.lower() in str(r).lower(), axis=1)]
+        if di_f_status != "All" and "Status" in view.columns:
+            view = view[view["Status"] == di_f_status]
+
+        status_icon = {"Open": "🔴", "Resolved": "✅", "Known quirk": "🟡"}
+
+        edit_df = add_delete_col(view[[c for c in ["index", "Metric", "Sources", "Status", "Created"] if c in view.columns]])
+        edited = st.data_editor(edit_df, column_config={
+            "Delete": st.column_config.CheckboxColumn("🗑", width="small"),
+            "index":  st.column_config.Column("Row", disabled=True, width="small"),
+            "Status": st.column_config.SelectboxColumn("Status", options=["Open", "Resolved", "Known quirk"]),
+        }, use_container_width=True, hide_index=True, key="di_editor")
+
+        bc1, bc2 = st.columns(2)
+        if bc1.button("💾 Save status", key="di_save", use_container_width=True):
+            for _, row in edited.iterrows():
+                orig_idx = int(row["index"])
+                if row.get("Status") != df.loc[orig_idx].get("Status"):
+                    dm().update_cell("DataIssues", orig_idx, "Status", row["Status"])
+            invalidate("DataIssues")
+            st.toast("Saved!")
+            st.rerun()
+        if bc2.button("🗑 Delete selected", key="di_del", use_container_width=True):
+            to_del = edited[edited["Delete"] == True]["index"].tolist()
+            if not to_del:
+                st.info("Tick rows first.")
+            else:
+                for idx in sorted(to_del, reverse=True):
+                    dm().delete_row("DataIssues", int(idx))
+                invalidate("DataIssues")
+                st.rerun()
+
+        st.markdown("---")
+        for _, row in view.iterrows():
+            orig_idx = int(row["index"])
+            icon = status_icon.get(row.get("Status", ""), "📄")
+            with st.expander(f"{icon} **{row.get('Metric', '')}**  ·  {row.get('Status', '')}  ·  {row.get('Created', '')}"):
+                if row.get("Tags"):
+                    st.caption(f"🏷 {row['Tags']}")
+                if row.get("Sources"):
+                    st.markdown(f"**Sources:** {row['Sources']}")
+
+                if row.get("Issue"):
+                    st.markdown("**Issue / discrepancy**")
+                    st.markdown(row["Issue"])
+
+                if row.get("Impact"):
+                    st.markdown("**Impact**")
+                    st.warning(row["Impact"])
+
+                if row.get("Resolution"):
+                    st.markdown("**Resolution / how to handle**")
+                    st.success(row["Resolution"])
+
+                st.markdown("---")
+                st.markdown("### ✏️ Edit")
+                e_metric     = st.text_input("Metric / field",           value=row.get("Metric", ""),     key=f"di_em_{orig_idx}")
+                e_sources    = st.text_input("Sources / tables",          value=row.get("Sources", ""),    key=f"di_es_{orig_idx}")
+                e_issue      = st.text_area("Issue / discrepancy",        value=row.get("Issue", ""),      key=f"di_ei_{orig_idx}", height=100)
+                e_impact     = st.text_area("Impact",                     value=row.get("Impact", ""),     key=f"di_eimp_{orig_idx}", height=80)
+                e_resolution = st.text_area("Resolution / how to handle", value=row.get("Resolution", ""), key=f"di_er_{orig_idx}", height=80)
+                st_opts      = ["Open", "Resolved", "Known quirk"]
+                e_status     = st.selectbox("Status", st_opts,
+                                            index=st_opts.index(row.get("Status", "Open")) if row.get("Status") in st_opts else 0,
+                                            key=f"di_est_{orig_idx}")
+                e_tags       = st.text_input("Tags", value=row.get("Tags", ""), key=f"di_etg_{orig_idx}")
+
+                dib1, dib2 = st.columns(2)
+                if dib1.button("💾 Save changes", key=f"di_sv_{orig_idx}", use_container_width=True):
+                    for col, val in [("Metric", e_metric), ("Sources", e_sources), ("Issue", e_issue),
+                                     ("Impact", e_impact), ("Resolution", e_resolution),
+                                     ("Status", e_status), ("Tags", e_tags)]:
+                        if val != row.get(col, ""):
+                            dm().update_cell("DataIssues", orig_idx, col, val)
+                    invalidate("DataIssues")
+                    st.toast("Saved!")
+                    st.rerun()
+                if dib2.button("🗑 Delete", key=f"di_del_{orig_idx}", use_container_width=True):
+                    dm().delete_row("DataIssues", orig_idx)
+                    invalidate("DataIssues")
                     st.toast("Deleted!")
                     st.rerun()
 
