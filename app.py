@@ -231,6 +231,8 @@ with tab_todo:
         if "Created" in pending.columns:
             pending = pending.sort_values("Created", ascending=False)
         done_df = df[df["Done"] == "Yes"].reset_index(drop=False) if "Done" in df.columns else pd.DataFrame()
+        if not done_df.empty and "Created" in done_df.columns:
+            done_df = done_df.sort_values("Created", ascending=False)
 
         if pending.empty:
             st.success("🎉 All done!")
@@ -437,10 +439,10 @@ with tab_issues:
                         st.toast("Saved!")
                         st.rerun()
                     st.markdown("---")
-                    ib1, ib2 = st.columns(2)
+                    ib1, ib2, ib3, ib4 = st.columns(4)
                     cur_status = row.get("Status","Open")
                     if cur_status != "Resolved":
-                        if ib1.button("✅ Mark Resolved", key=f"is_res_{orig_idx}", use_container_width=True):
+                        if ib1.button("✅ Resolved", key=f"is_res_{orig_idx}", use_container_width=True):
                             dm().update_cell("Issues", orig_idx, "Status", "Resolved")
                             invalidate("Issues")
                             st.toast("Marked as resolved!")
@@ -455,6 +457,23 @@ with tab_issues:
                         dm().update_cell("Issues", orig_idx, "Status", "In Progress")
                         invalidate("Issues")
                         st.toast("Marked in progress!")
+                        st.rerun()
+                    if ib3.button("📋 → Resolution", key=f"is_tores_{orig_idx}", use_container_width=True):
+                        save(dm().append_row, "Resolutions", {
+                            "Title": row.get("Title",""),
+                            "Problem": row.get("Description",""),
+                            "Steps": "", "Solution": "",
+                            "Files": "", "Tags": "",
+                            "Created": str(date.today()),
+                        }, sheet="Resolutions", success_msg="Moved to Resolutions!")
+                        dm().delete_row("Issues", orig_idx)
+                        invalidate("Issues")
+                        invalidate("Resolutions")
+                        st.rerun()
+                    if ib4.button("🗑 Delete", key=f"is_del_{orig_idx}", use_container_width=True):
+                        dm().delete_row("Issues", orig_idx)
+                        invalidate("Issues")
+                        st.toast("Deleted!")
                         st.rerun()
 
 
@@ -577,6 +596,37 @@ with tab_actions:
                             invalidate("ActionItems")
                             st.toast("Reopened!")
                             st.rerun()
+                    st.markdown("---")
+                    ac1, ac2, ac3 = st.columns(3)
+                    if ac1.button("☑️ → TODO", key=f"ac_totodo_{orig_idx}", use_container_width=True):
+                        save(dm().append_row, "TODO", {
+                            "Task": row.get("Task",""),
+                            "Done": "No",
+                            "Created": str(date.today()),
+                            "DueDate": row.get("Due",""),
+                            "HowWeSolvedIt": "",
+                        }, sheet="TODO", success_msg="Moved to TODO!")
+                        dm().delete_row("ActionItems", orig_idx)
+                        invalidate("ActionItems")
+                        invalidate("TODO")
+                        st.rerun()
+                    if ac2.button("📋 → Resolution", key=f"ac_tores_{orig_idx}", use_container_width=True):
+                        save(dm().append_row, "Resolutions", {
+                            "Title": row.get("Task",""),
+                            "Problem": row.get("Notes",""),
+                            "Steps": "", "Solution": "",
+                            "Files": "", "Tags": "",
+                            "Created": str(date.today()),
+                        }, sheet="Resolutions", success_msg="Moved to Resolutions!")
+                        dm().delete_row("ActionItems", orig_idx)
+                        invalidate("ActionItems")
+                        invalidate("Resolutions")
+                        st.rerun()
+                    if ac3.button("🗑 Delete", key=f"ac_del_{orig_idx}", use_container_width=True):
+                        dm().delete_row("ActionItems", orig_idx)
+                        invalidate("ActionItems")
+                        st.toast("Deleted!")
+                        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
