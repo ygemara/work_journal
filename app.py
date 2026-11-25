@@ -245,7 +245,11 @@ with tab_todo:
                 pending = pending.sort_values("Created", ascending=False) if "Created" in pending.columns else pending
         else:
             if "Created" in pending.columns:
-                pending = pending.sort_values("Created", ascending=False)
+                pending = pending.copy()
+                pending["_created_sort"] = pending["Created"].replace("", pd.NA)
+                pending = pending.sort_values("_created_sort", ascending=False, na_position="last").drop(columns=["_created_sort"])
+            else:
+                pending = pending.iloc[::-1]
 
         def _todo_set_order(idx_list):
             """Write sequential Order values for a list of orig_idx in display order."""
