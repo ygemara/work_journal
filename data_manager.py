@@ -13,7 +13,7 @@ SCHEMAS: dict[str, list[str]] = {
     "DataIssues":  ["Metric", "Sources", "Issue", "Impact", "Resolution", "Status", "Tags", "Created"],
     "Procedures":  ["Title", "Category", "Steps", "Notes", "Tags", "Created", "ImageURL"],
     "Projects":       ["Title", "Status", "Description", "Approach", "Results", "NextSteps", "Files", "Tags", "Created"],
-    "TODO":           ["Task", "Done", "Created", "DueDate", "HowWeSolvedIt"],
+    "TODO":           ["Task", "Done", "Created", "DueDate", "HowWeSolvedIt", "Order"],
     "Resolutions":    ["Title", "Problem", "Steps", "Solution", "Files", "Tags", "Created"],
     "DataDict":    ["OutputTable", "Column", "SourceTable", "SourceColumn", "Script", "Transform", "Notes", "Created"],
     "Reference":   ["Title", "Category", "Content", "Explanation", "Tags", "Created"],
@@ -187,6 +187,20 @@ class SheetsManager:
             return  # column doesn't exist in sheet, skip silently
         col_idx = header.index(column) + 1
         ws.update_cell(df_index + 2, col_idx, value)
+
+    def batch_update_column(self, sheet: str, df_index_value_pairs: list, column: str):
+        """Update many cells in one column in a single API call."""
+        ws = self._ws(sheet)
+        header = ws.row_values(1)
+        if column not in header:
+            return
+        col_idx = header.index(column) + 1
+        col_letter = gspread.utils.rowcol_to_a1(1, col_idx)[:-1]
+        updates = [
+            {"range": f"{col_letter}{df_idx + 2}", "values": [[value]]}
+            for df_idx, value in df_index_value_pairs
+        ]
+        ws.batch_update(updates, value_input_option="USER_ENTERED")
 
     def delete_row(self, sheet: str, df_index: int):
         ws = self._ws(sheet)
