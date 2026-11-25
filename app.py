@@ -223,12 +223,6 @@ with tab_todo:
 
     st.markdown("---")
 
-    try:
-        from streamlit_sortables import sort_items
-        _sortables_ok = True
-    except ImportError:
-        _sortables_ok = False
-
     df = get_data("TODO")
     if df.empty:
         st.info("Nothing here yet — add your first task above.")
@@ -238,80 +232,33 @@ with tab_todo:
         if not done_df.empty and "Created" in done_df.columns:
             done_df = done_df.sort_values("Created", ascending=False)
 
-        # ── Auto-assign Order values if missing ───────────────────────────────
-        _order_col_missing = "Order" not in pending.columns
-        if not _order_col_missing and (pending["Order"].isna().all() or (pending["Order"].astype(str).str.strip() == "").all()):
+        # Sort by Order col if present, else Created desc
+        if "Order" in pending.columns:
             try:
-                for i, (_, row) in enumerate(pending.iterrows()):
-                    dm().update_cell("TODO", int(row["index"]), "Order", i)
-                invalidate("TODO")
-                df = get_data("TODO")
-                pending = df[df["Done"] == "No"].reset_index(drop=False)
+                pending["_ord"] = pd.to_numeric(pending["Order"], errors="coerce").fillna(999)
+                pending = pending.sort_values("_ord").drop(columns=["_ord"])
             except Exception:
-                _order_col_missing = True  # column not in sheet yet, skip ordering
-        if _order_col_missing:
-            st.info("💡 Add an **Order** column header to the end of your TODO sheet in Google Sheets to enable drag-and-drop ordering, then refresh.")
-            _sortables_ok = False  # fall back to plain view
-
-        # Sort by Order, falling back to Created
-        try:
-            pending["_order"] = pd.to_numeric(pending["Order"], errors="coerce").fillna(999)
-            pending = pending.sort_values("_order").drop(columns=["_order"])
-        except Exception:
+                pending = pending.sort_values("Created", ascending=False) if "Created" in pending.columns else pending
+        else:
             if "Created" in pending.columns:
                 pending = pending.sort_values("Created", ascending=False)
 
+        def _todo_set_order(idx_list):
+            """Write sequential Order values for a list of orig_idx in display order."""
+            for new_pos, orig_idx in enumerate(idx_list):
+                dm().update_cell("TODO", orig_idx, "Order", new_pos)
+            invalidate("TODO")
+
         if pending.empty:
             st.success("🎉 All done!")
-        elif _sortables_ok:
-            # ── Drag-and-drop card view ───────────────────────────────────────
+        else:
             today_str = str(date.today())
+            pending_idxs = [int(r["index"]) for _, r in pending.iterrows()]
 
-            def _card_label(row):
-                due = row.get("DueDate", "")
-                due_part = f"  📅 {due}" if due else ""
-                overdue = due and due < today_str
-                prefix = "🔴 " if overdue else ""
-                return f"{prefix}{row.get('Task','')}{due_part}"
-
-            card_labels = [_card_label(r) for _, r in pending.iterrows()]
-            # Map label → orig_idx (labels must be unique for sortables)
-            label_to_idx = {}
-            for i, (_, row) in enumerate(pending.iterrows()):
-                lbl = card_labels[i]
-                # Deduplicate if identical task names exist
-                base = lbl
-                counter = 1
-                while lbl in label_to_idx:
-                    lbl = f"{base} ({counter})"
-                    counter += 1
-                card_labels[i] = lbl
-                label_to_idx[lbl] = int(row["index"])
-
-            st.caption("☰ Drag cards to reorder — click **Save order** to persist")
-            sorted_labels = sort_items(card_labels, direction="vertical", key="todo_sort")
-
-            if st.button("💾 Save order", key="todo_save_order", type="primary"):
-                for new_pos, lbl in enumerate(sorted_labels):
-                    orig_idx = label_to_idx.get(lbl)
-                    if orig_idx is not None:
-                        dm().update_cell("TODO", orig_idx, "Order", new_pos)
-                invalidate("TODO")
-                st.toast("Order saved!")
-                st.rerun()
-
-            st.markdown("---")
-            # Reorder pending to match sorted_labels for displaying detail cards
-            lbl_order = {lbl: i for i, lbl in enumerate(sorted_labels)}
-            pending_rows = list(pending.iterrows())
-            pending_rows.sort(key=lambda x: lbl_order.get(
-                next((l for l, idx in label_to_idx.items() if idx == int(x[1]["index"])), ""), 999
-            ))
-
-            for _, row in pending_rows:
+            for pos, (_, row) in enumerate(pending.iterrows()):
                 orig_idx = int(row["index"])
                 with st.container(border=True):
-                    c1, c2, c3, c4, c5 = st.columns([5, 1, 1, 1, 1])
+                    c1, c2, c3, c4, c5, c6, c7 = st.columns([5, 1, 1, 1, 1, 1, 1])
                     due_str = row.get("DueDate", "")
                     due_label = ""
                     if due_str:
@@ -334,7 +281,18 @@ with tab_todo:
                     if c4.button("📋", key=f"td_promo_{orig_idx}", use_container_width=True, help="Promote to Resolution"):
                         st.session_state[f"promote_todo_{orig_idx}"] = True
                         st.rerun()
-                    if c5.button("🗑", key=f"td_del_{orig_idx}", use_container_width=True, help="Delete"):
+                    # Move up / move to top
+                    if pos > 0:
+                        if c5.button("⬆️", key=f"td_top_{orig_idx}", use_container_width=True, help="Move to top"):
+                            new_order = [orig_idx] + [i for i in pending_idxs if i != orig_idx]
+                            _todo_set_order(new_order)
+                            st.rerun()
+                        if c6.button("↑", key=f"td_up_{orig_idx}", use_container_width=True, help="Move up one"):
+                            new_order = pending_idxs[:]
+                            new_order[pos], new_order[pos - 1] = new_order[pos - 1], new_order[pos]
+                            _todo_set_order(new_order)
+                            st.rerun()
+                    if c7.button("🗑", key=f"td_del_{orig_idx}", use_container_width=True, help="Delete"):
                         dm().delete_row("TODO", orig_idx)
                         invalidate("TODO")
                         st.rerun()
@@ -391,38 +349,6 @@ with tab_todo:
                         if pb2.button("Cancel", key=f"pr_cancel_{orig_idx}", use_container_width=True):
                             st.session_state[f"promote_todo_{orig_idx}"] = False
                             st.rerun()
-        else:
-            # ── Fallback: original card view without drag (sortables not installed) ──
-            today_str = str(date.today())
-            for _, row in pending.iterrows():
-                orig_idx = int(row["index"])
-                with st.container(border=True):
-                    c1, c2, c3, c4, c5 = st.columns([5, 1, 1, 1, 1])
-                    due_str = row.get("DueDate", "")
-                    due_label = ""
-                    if due_str:
-                        due_label = f" &nbsp;<small style='color:{'#ef4444' if due_str < today_str else '#94a3b8'}'>📅 {due_str}</small>"
-                    c1.markdown(
-                        f"**{row.get('Task','')}**{due_label} "
-                        f"<small style='color:#cbd5e1'>&nbsp;{row.get('Created','')}</small>",
-                        unsafe_allow_html=True
-                    )
-                    if row.get("HowWeSolvedIt","").strip():
-                        c1.caption(row["HowWeSolvedIt"])
-                    if c2.button("✓", key=f"td_done_{orig_idx}", use_container_width=True, help="Mark done"):
-                        dm().update_cell("TODO", orig_idx, "Done", "Yes")
-                        invalidate("TODO")
-                        st.rerun()
-                    if c3.button("✏️", key=f"td_edit_{orig_idx}", use_container_width=True, help="Edit"):
-                        st.session_state[f"editing_todo_{orig_idx}"] = not st.session_state.get(f"editing_todo_{orig_idx}", False)
-                        st.rerun()
-                    if c4.button("📋", key=f"td_promo_{orig_idx}", use_container_width=True, help="Promote to Resolution"):
-                        st.session_state[f"promote_todo_{orig_idx}"] = True
-                        st.rerun()
-                    if c5.button("🗑", key=f"td_del_{orig_idx}", use_container_width=True, help="Delete"):
-                        dm().delete_row("TODO", orig_idx)
-                        invalidate("TODO")
-                        st.rerun()
 
         # Completed items — with Revive button
         if not done_df.empty:
