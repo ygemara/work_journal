@@ -239,12 +239,19 @@ with tab_todo:
             done_df = done_df.sort_values("Created", ascending=False)
 
         # ── Auto-assign Order values if missing ───────────────────────────────
-        if "Order" not in pending.columns or pending["Order"].isna().all() or (pending["Order"].astype(str).str.strip() == "").all():
-            for i, (_, row) in enumerate(pending.iterrows()):
-                dm().update_cell("TODO", int(row["index"]), "Order", i)
-            invalidate("TODO")
-            df = get_data("TODO")
-            pending = df[df["Done"] == "No"].reset_index(drop=False)
+        _order_col_missing = "Order" not in pending.columns
+        if not _order_col_missing and (pending["Order"].isna().all() or (pending["Order"].astype(str).str.strip() == "").all()):
+            try:
+                for i, (_, row) in enumerate(pending.iterrows()):
+                    dm().update_cell("TODO", int(row["index"]), "Order", i)
+                invalidate("TODO")
+                df = get_data("TODO")
+                pending = df[df["Done"] == "No"].reset_index(drop=False)
+            except Exception:
+                _order_col_missing = True  # column not in sheet yet, skip ordering
+        if _order_col_missing:
+            st.info("💡 Add an **Order** column header to the end of your TODO sheet in Google Sheets to enable drag-and-drop ordering, then refresh.")
+            _sortables_ok = False  # fall back to plain view
 
         # Sort by Order, falling back to Created
         try:
