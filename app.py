@@ -232,8 +232,12 @@ with tab_todo:
         if not done_df.empty and "Created" in done_df.columns:
             done_df = done_df.sort_values("Created", ascending=False)
 
-        # Sort by Order col if present, else Created desc
-        if "Order" in pending.columns:
+        # Sort by Order col if any values are set, else Created desc
+        _has_order = (
+            "Order" in pending.columns
+            and pd.to_numeric(pending["Order"], errors="coerce").notna().any()
+        )
+        if _has_order:
             try:
                 pending["_ord"] = pd.to_numeric(pending["Order"], errors="coerce").fillna(999)
                 pending = pending.sort_values("_ord").drop(columns=["_ord"])
