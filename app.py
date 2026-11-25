@@ -232,11 +232,9 @@ with tab_todo:
         if not done_df.empty and "Created" in done_df.columns:
             done_df = done_df.sort_values("Created", ascending=False)
 
-        # Sort by Order col if any values are set, else Created desc
-        _has_order = (
-            "Order" in pending.columns
-            and pd.to_numeric(pending["Order"], errors="coerce").notna().any()
-        )
+        # Sort by Order col only if values are meaningfully different (range > 0)
+        _order_vals = pd.to_numeric(pending.get("Order", pd.Series(dtype=float)), errors="coerce").dropna()
+        _has_order = len(_order_vals) > 1 and (_order_vals.max() - _order_vals.min()) > 0
         if _has_order:
             try:
                 pending["_ord"] = pd.to_numeric(pending["Order"], errors="coerce").fillna(999)
@@ -252,10 +250,13 @@ with tab_todo:
                 pending = pending.iloc[::-1]
 
         def _todo_set_order(idx_list):
-            """Write sequential Order values for a list of orig_idx in display order."""
-            for new_pos, orig_idx in enumerate(idx_list):
-                dm().update_cell("TODO", orig_idx, "Order", new_pos)
-            invalidate("TODO")
+            """Write sequential Order values — silently skips if Order column not in sheet."""
+            try:
+                for new_pos, orig_idx in enumerate(idx_list):
+                    dm().update_cell("TODO", orig_idx, "Order", new_pos)
+                invalidate("TODO")
+            except Exception:
+                st.toast("Add an 'Order' column to your TODO sheet to save order.", icon="ℹ️")
 
         if pending.empty:
             st.success("🎉 All done!")
@@ -266,7 +267,7 @@ with tab_todo:
             for pos, (_, row) in enumerate(pending.iterrows()):
                 orig_idx = int(row["index"])
                 with st.container(border=True):
-                    c1, c2, c3, c4, c5, c6, c7 = st.columns([5, 1, 1, 1, 1, 1, 1])
+                    c1, c2, c3, c4, c5, c6, c7 = st.columns([5, 1, 1, 1, 1.5, 1, 1])
                     due_str = row.get("DueDate", "")
                     due_label = ""
                     if due_str:
@@ -291,11 +292,11 @@ with tab_todo:
                         st.rerun()
                     # Move up / move to top
                     if pos > 0:
-                        if c5.button("⬆️", key=f"td_top_{orig_idx}", use_container_width=True, help="Move to top"):
+                        if c5.button("Top", key=f"td_top_{orig_idx}", use_container_width=True, help="Move to top"):
                             new_order = [orig_idx] + [i for i in pending_idxs if i != orig_idx]
                             _todo_set_order(new_order)
                             st.rerun()
-                        if c6.button("↑", key=f"td_up_{orig_idx}", use_container_width=True, help="Move up one"):
+                        if c6.button("Up", key=f"td_up_{orig_idx}", use_container_width=True, help="Move up one"):
                             new_order = pending_idxs[:]
                             new_order[pos], new_order[pos - 1] = new_order[pos - 1], new_order[pos]
                             _todo_set_order(new_order)
