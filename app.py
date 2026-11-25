@@ -250,13 +250,13 @@ with tab_todo:
                 pending = pending.iloc[::-1]
 
         def _todo_set_order(idx_list):
-            """Write sequential Order values — silently skips if Order column not in sheet."""
+            """Batch-write sequential Order values — silently skips if Order column not in sheet."""
             try:
-                for new_pos, orig_idx in enumerate(idx_list):
-                    dm().update_cell("TODO", orig_idx, "Order", new_pos)
+                pairs = [(orig_idx, new_pos) for new_pos, orig_idx in enumerate(idx_list)]
+                dm().batch_update_column("TODO", pairs, "Order")
                 invalidate("TODO")
             except Exception:
-                st.toast("Add an 'Order' column to your TODO sheet to save order.", icon="ℹ️")
+                st.toast("Add an 'Order' column to your TODO sheet to enable ordering.", icon="ℹ️")
 
         if pending.empty:
             st.success("🎉 All done!")
